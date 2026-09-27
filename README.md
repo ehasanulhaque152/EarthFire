@@ -10,13 +10,28 @@ The linked 2026 Space Apps challenge statement was unavailable when this project
 backend/app/core.py     FIRMS ingestion, SQLite storage, daily grid and statistics
 backend/app/main.py     FastAPI endpoints
 backend/backfill.py     Historical FIRMS importer
-backend/train_lstm.py  Optional PyTorch forecast training
+backend/train_lstm.py  Optional TensorFlow/Keras forecast training
 src/App.tsx             Dashboard controls, metrics, calendar and charts
 src/Globe.tsx           Interactive 3D globe
 src/style.css           Responsive dashboard styles
+scripts/make_walkthrough.py  Illustrated product video generator
+docs/earthfire-walkthrough.mp4  36-second captioned walkthrough
 ```
 
 The local `.env`, downloaded observations in `data/`, installed dependencies and build output are excluded from Git. The public repository includes `.env.example` instead of a live key.
+
+## Preview and walkthrough
+
+Run the API and dashboard as described below, then open [the local preview](http://127.0.0.1:5173/). The [36-second walkthrough video](docs/earthfire-walkthrough.mp4) illustrates the region and date controls, sensor layers, trends, and harmonization method using a synced Bangladesh snapshot.
+
+[![EarthFire walkthrough poster](docs/earthfire-walkthrough-poster.png)](docs/earthfire-walkthrough.mp4)
+
+To regenerate the video from your current local FIRMS database:
+
+```powershell
+python -m pip install -r scripts\requirements-video.txt
+python scripts\make_walkthrough.py
+```
 
 ## Start
 
@@ -55,10 +70,10 @@ FIRMS standard processing (SP) and near-real-time (NRT) have different date rang
 .\.venv\Scripts\python -m backend.backfill --bbox 88 20 93 27 --start 2026-07-01 --end 2026-08-31 --sources MODIS_NRT VIIRS_NOAA20_NRT
 ```
 
-This script calls the FIRMS area API in 5-day chunks. Larger regions and longer periods consume more FIRMS transactions and storage. For an exploratory next-day forecast, install PyTorch in the virtual environment and train after at least 60 historical days, including at least 20 days with detections:
+This script calls the FIRMS area API in 5-day chunks. Larger regions and longer periods consume more FIRMS transactions and storage. For an exploratory next-day forecast, use a Python 3.11–3.13 virtual environment, install TensorFlow, and train after at least 60 consecutive covered days, including at least 20 days with detections. The latest TensorFlow package supports CPU training on native Windows; GPU training requires another supported platform or WSL2.
 
 ```powershell
-.\.venv\Scripts\python -m pip install torch
+.\.venv\Scripts\python -m pip install -r backend\requirements-ml.txt
 .\.venv\Scripts\python -m backend.train_lstm --bbox 88 20 93 27
 ```
 
