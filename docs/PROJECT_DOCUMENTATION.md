@@ -42,7 +42,7 @@ The browser talks to the local FastAPI server through Vite's `/api` proxy during
 | TensorFlow/Keras + NumPy | Optional LSTM | Trains a small sequence model for next-day occupied-cell counts. |
 | Pillow + ImageIO/FFmpeg | Walkthrough video | Renders a captioned, illustrated UI demonstration to MP4. |
 
-The frontend's Lucide icons provide navigation and metric symbols. CSS in `src/style.css` controls the responsive dark layout. Prettier formats the frontend source; TypeScript checks frontend types.
+The frontend's Lucide icons provide navigation and metric symbols. CSS in `frontend/src/style.css` controls the responsive dark layout. Prettier formats the frontend source; TypeScript checks frontend types.
 
 ## 3. NASA FIRMS data and the map key
 
@@ -69,7 +69,6 @@ Install Node.js 20+ and Python 3.11–3.13 if you intend to use TensorFlow. The 
 ```powershell
 Copy-Item .env.example .env
 # Edit .env locally and set FIRMS_MAP_KEY; never commit this file.
-npm install
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r backend\requirements.txt
 ```
@@ -78,10 +77,17 @@ Start the backend and frontend in separate terminals:
 
 ```powershell
 .\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+In the frontend terminal, run:
+
+```powershell
+Set-Location frontend
+npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/`; API documentation is at `http://127.0.0.1:8000/docs`. The dashboard initially requests the last 30 days for Bangladesh. Click **Sync latest data** to fetch the selected region's latest three days. The sync button requires a reachable backend and configured key. Data and forecasts are saved under ignored `data/`. Set `EARTHFIRE_DB` if you need another SQLite path.
+Open `http://127.0.0.1:5173/`; API documentation is at `http://127.0.0.1:8000/docs`. The dashboard initially requests the last 30 days for Bangladesh. Click **Sync latest data** to fetch the selected region's latest three days. The sync button requires a reachable backend and configured key. A SQLite snapshot is committed at `data/earthfire.sqlite3`; forecasts and later data changes are local. Set `EARTHFIRE_DB` if you need another SQLite path.
 
 ## 5. Backend implementation
 
@@ -132,13 +138,13 @@ Bounding boxes are `[west, south, east, north]` and validated against world coor
 
 ## 6. Frontend implementation
 
-`src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. The sync button posts a three-day request to `/api/ingest`, then reloads the overview. The frontend does not embed the FIRMS key.
+`frontend/src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. The sync button posts a three-day request to `/api/ingest`, then reloads the overview. The frontend does not embed the FIRMS key.
 
-The metric cards show totals for the loaded 30-day window, while the calendar and globe show the selected day. The layer buttons filter that day's cells to MODIS, VIIRS, or all occupied cells. The trends chart uses SVG polylines for sensor counts or FRP. Its displayed “harmonized FRP proxy” uses the larger **daily** sensor FRP total, whereas `core.py` returns the larger sensor sum **per cell** in each cell record. Both are exploratory display proxies and should not be treated as calibrated energy totals. `src/style.css` defines layout, responsive rules, colors and control states.
+The metric cards show totals for the loaded 30-day window, while the calendar and globe show the selected day. The layer buttons filter that day's cells to MODIS, VIIRS, or all occupied cells. The trends chart uses SVG polylines for sensor counts or FRP. Its displayed “harmonized FRP proxy” uses the larger **daily** sensor FRP total, whereas `core.py` returns the larger sensor sum **per cell** in each cell record. Both are exploratory display proxies and should not be treated as calibrated energy totals. `frontend/src/style.css` defines layout, responsive rules, colors and control states.
 
-`src/Globe.tsx` creates a Three.js sphere, atmosphere, latitude/longitude grid, country outlines and point markers. It converts geographic coordinates to 3D Cartesian coordinates, focuses the globe on the chosen region, lets the user drag to rotate, and resizes the WebGL canvas with `ResizeObserver`. Marker color identifies the selected layer; marker size grows logarithmically with the value. For browser performance it displays at most 1,000 points and disposes geometries/materials when markers change or the component unmounts.
+`frontend/src/Globe.tsx` creates a Three.js sphere, atmosphere, latitude/longitude grid, country outlines and point markers. It converts geographic coordinates to 3D Cartesian coordinates, focuses the globe on the chosen region, lets the user drag to rotate, and resizes the WebGL canvas with `ResizeObserver`. Marker color identifies the selected layer; marker size grows logarithmically with the value. For browser performance it displays at most 1,000 points and disposes geometries/materials when markers change or the component unmounts.
 
-`src/style.css` lays out the sidebar and main content, styles loading/connection and layer states, and adapts the metric, globe, calendar and lower chart sections at 1200 px, 850 px and 560 px breakpoints. `src/main.tsx` mounts `App` under React Strict Mode. `index.html` supplies the root element, tab title, theme color and Google Fonts links; a network connection is needed to fetch those web fonts, while local fallback fonts still render the page.
+`frontend/src/style.css` lays out the sidebar and main content, styles loading/connection and layer states, and adapts the metric, globe, calendar and lower chart sections at 1200 px, 850 px and 560 px breakpoints. `frontend/src/main.tsx` mounts `App` under React Strict Mode. `frontend/index.html` supplies the root element, tab title, theme color and Google Fonts links; a network connection is needed to fetch those web fonts, while local fallback fonts still render the page.
 
 ## 7. Finding historical data and training the LSTM
 
@@ -169,18 +175,18 @@ For a more defensible future model, compare against a persistence or seasonal ba
 | File | Responsibility and important logic |
 | --- | --- |
 | `.env.example` | Template for `FIRMS_MAP_KEY` and optional `EARTHFIRE_DB`; contains no live secret. |
-| `.gitignore` | Excludes `.env`, local databases, virtual environments, installed packages, render builds and caches from the public repo. |
-| `.prettierrc.json` | Frontend code formatting preferences. |
+| `.gitignore` | Excludes `.env`, new local database files, virtual environments, installed packages, render builds and caches. The committed SQLite snapshot remains tracked. |
+| `frontend/.prettierrc.json` | Frontend code formatting preferences. |
 | `README.md` | Quick start, project layout, preview, backfill command and main scientific limits. |
-| `package.json` | Frontend dependencies and `dev`, `build`, `preview`, `format`, `format:check` commands. |
-| `package-lock.json` | Exact resolved npm dependency tree for repeatable installs. |
-| `tsconfig.json` | Strict TypeScript, React JSX, browser libraries and no-emission type checking. |
-| `vite.config.ts` | React plugin and development `/api` proxy to FastAPI on port 8000. |
-| `index.html` | Root DOM node, browser metadata, font links and module entry. |
-| `src/main.tsx` | Mounts the React app and imports styles. |
-| `src/App.tsx` | Dashboard state, API calls, region presets, metrics, calendar, layer controls, SVG charts, status and forecast display. |
-| `src/Globe.tsx` | Three.js scene, map outlines, markers, region focus, pointer rotation, resize and cleanup. |
-| `src/style.css` | Responsive dashboard appearance and interaction states. |
+| `frontend/package.json` | Frontend dependencies and `dev`, `build`, `preview`, `format`, `format:check` commands. |
+| `frontend/package-lock.json` | Exact resolved npm dependency tree for repeatable installs. |
+| `frontend/tsconfig.json` | Strict TypeScript, React JSX, browser libraries and no-emission type checking. |
+| `frontend/vite.config.ts` | React plugin and development `/api` proxy to FastAPI on port 8000. |
+| `frontend/index.html` | Root DOM node, browser metadata, font links and module entry. |
+| `frontend/src/main.tsx` | Mounts the React app and imports styles. |
+| `frontend/src/App.tsx` | Dashboard state, API calls, region presets, metrics, calendar, layer controls, SVG charts, status and forecast display. |
+| `frontend/src/Globe.tsx` | Three.js scene, map outlines, markers, region focus, pointer rotation, resize and cleanup. |
+| `frontend/src/style.css` | Responsive dashboard appearance and interaction states. |
 | `backend/__init__.py`, `backend/app/__init__.py` | Mark Python packages for `python -m backend...` imports. |
 | `backend/requirements.txt` | Core API/runtime Python packages. |
 | `backend/requirements-ml.txt` | Optional TensorFlow dependency for training. |
@@ -188,14 +194,14 @@ For a more defensible future model, compare against a persistence or seasonal ba
 | `backend/app/main.py` | FastAPI routes, input validation, error responses, CORS and saved-forecast freshness check. |
 | `backend/backfill.py` | CLI importer that calls the FIRMS API in five-day chunks. |
 | `backend/train_lstm.py` | Optional TensorFlow/Keras training, chronological holdout, next-day prediction and JSON artifact. |
-| `scripts/requirements-video.txt` | Optional Pillow, ImageIO, FFmpeg and NumPy dependencies for the video generator. |
-| `scripts/make_walkthrough.py` | Reads a local synced data snapshot, draws UI scenes and globe context, then encodes a 36-second H.264 walkthrough. It is an illustrated demonstration, not a live screen recording. |
+| `data/earthfire.sqlite3` | Committed snapshot of NASA FIRMS observations for local exploration. |
+| `data/README.md` | Explains the committed SQLite snapshot. |
 | `docs/earthfire-walkthrough.mp4` | Shareable illustrated website walkthrough. |
 | `docs/earthfire-walkthrough-poster.png` | Preview thumbnail linked to the video in README. |
 | `docs/EarthFire-website-overview.pptx` | Six-slide editable presentation explaining the website with stills from the walkthrough. |
 | `docs/PROJECT_DOCUMENTATION.md` | This detailed technical and user guide. |
 
-The ignored `data/earthfire.sqlite3` is generated at runtime. Ignored `data/forecast-*.json` files are generated only after successful training. Neither the local database nor the real map key is published in this repository.
+The committed `data/earthfire.sqlite3` is a snapshot. Backend syncs can update this tracked database in a local checkout. `data/forecast-*.json` files are ignored and generated only after successful training. The real map key is not published in this repository.
 
 ### Function and configuration details
 
@@ -205,9 +211,9 @@ The ignored `data/earthfire.sqlite3` is generated at runtime. Ignored `data/fore
 
 **Dashboard path.** In `App.tsx`, `Sparkline()` draws metric-card mini charts, `TrendChart()` draws three daily polylines, `load()` retrieves overview/health data, and `sync()` requests new FIRMS data. React state determines which region, UTC day, sensor layer and trend metric is visible. The chart and calendar are rendered from the API's `series`; the globe receives only cells from the selected day. In `Globe.tsx`, `xyz()` converts latitude/longitude to a sphere point, while its effects build the WebGL scene, refresh markers when points change, and clean up browser resources.
 
-**Frontend configuration.** `package.json` identifies runtime and development packages and defines npm scripts. `package-lock.json` pins the installed dependency graph. `tsconfig.json` enables strict browser/React checking with `noEmit`; Vite performs the JavaScript build. `vite.config.ts` loads the React plugin and forwards `/api` requests to port 8000. `.prettierrc.json` sets single quotes, no semicolons, trailing commas and 100-character line width. These files do not hold the NASA key.
+**Frontend configuration.** The files under `frontend/` include `package.json` for runtime and development packages and npm scripts. `package-lock.json` pins the installed dependency graph. `tsconfig.json` enables strict browser/React checking with `noEmit`; Vite performs the JavaScript build. `vite.config.ts` loads the React plugin and forwards `/api` requests to port 8000. `.prettierrc.json` sets single quotes, no semicolons, trailing commas and 100-character line width. These files do not hold the NASA key.
 
-**Walkthrough files.** `scripts/make_walkthrough.py` first reads Bangladesh's recent observations from SQLite, falling back to the local overview API. It refuses to render when no detections are available. Its scene functions draw the overview, date selection, layer comparison, trends, method and title/outro; `frame(t)` selects a scene at each point in the 36-second timeline. `main()` saves a poster and encodes 1280×720 frames at 15 fps to H.264 MP4. `scripts/requirements-video.txt` keeps these media dependencies optional. The resulting MP4 and poster are documentation assets, not inputs to the fire model. The PowerPoint file uses unique stills from this video and editable slide headings; its stills are illustrative UI renders.
+**Walkthrough files.** The MP4 and poster in `docs/` are documentation assets, not inputs to the fire model. The PowerPoint file uses unique stills from the video and editable slide headings; its stills are illustrative UI renders.
 
 ## 9. Known limits and next steps
 

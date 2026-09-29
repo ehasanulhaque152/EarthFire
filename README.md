@@ -11,14 +11,13 @@ backend/app/core.py     FIRMS ingestion, SQLite storage, daily grid and statisti
 backend/app/main.py     FastAPI endpoints
 backend/backfill.py     Historical FIRMS importer
 backend/train_lstm.py  Optional TensorFlow/Keras forecast training
-src/App.tsx             Dashboard controls, metrics, calendar and charts
-src/Globe.tsx           Interactive 3D globe
-src/style.css           Responsive dashboard styles
-scripts/make_walkthrough.py  Illustrated product video generator
+frontend/src/App.tsx    Dashboard controls, metrics, calendar and charts
+frontend/src/Globe.tsx  Interactive 3D globe
+frontend/src/style.css  Responsive dashboard styles
 docs/earthfire-walkthrough.mp4  36-second captioned walkthrough
 ```
 
-The local `.env`, downloaded observations in `data/`, installed dependencies and build output are excluded from Git. The public repository includes `.env.example` instead of a live key.
+The local `.env`, installed dependencies and build output are excluded from Git. A snapshot of NASA FIRMS observations is committed at [`data/earthfire.sqlite3`](data/earthfire.sqlite3). The public repository includes `.env.example` instead of a live key.
 
 ## Preview and walkthrough
 
@@ -26,22 +25,14 @@ Run the API and dashboard as described below, then open [the local preview](http
 
 [![EarthFire walkthrough poster](docs/earthfire-walkthrough-poster.png)](docs/earthfire-walkthrough.mp4)
 
-To regenerate the video from your current local FIRMS database:
-
-```powershell
-python -m pip install -r scripts\requirements-video.txt
-python scripts\make_walkthrough.py
-```
-
 ## Start
 
 Requires Node.js 20+ and Python 3.11+.
 
-1. Copy `.env.example` to `.env` and set `FIRMS_MAP_KEY` to your NASA FIRMS map key. `.env` and the SQLite database are gitignored.
+1. Copy `.env.example` to `.env` and set `FIRMS_MAP_KEY` to your NASA FIRMS map key if you want to sync fresh data. The committed SQLite snapshot already provides observations to explore.
 2. Install dependencies:
 
    ```powershell
-   npm install
    python -m venv .venv
    .\.venv\Scripts\python -m pip install -r backend\requirements.txt
    ```
@@ -52,9 +43,11 @@ Requires Node.js 20+ and Python 3.11+.
    .\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
    ```
 
-4. Start the dashboard in a second terminal and open http://127.0.0.1:5173:
+4. Install and start the dashboard from `frontend/` in a second terminal, then open http://127.0.0.1:5173:
 
    ```powershell
+   Set-Location frontend
+   npm install
    npm run dev
    ```
 
