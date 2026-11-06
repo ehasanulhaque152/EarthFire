@@ -526,7 +526,7 @@ export default function App() {
                   SATELLITE OBSERVATIONS <span>•</span> {region.toUpperCase()}
                 </div>
                 <div className="globe-bottom-label">
-                  DRAG TO ROTATE <span>·</span> {points.length} ACTIVE CELLS
+                  DRAG TO ROTATE <span>·</span> SCROLL TO ZOOM <span>·</span> {points.length} ACTIVE CELLS
                 </div>
                 {selectedFire && (
                   <section className="fire-details" aria-label="Selected fire details">
