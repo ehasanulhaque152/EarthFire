@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Satellite,
   ShieldAlert,
+  X,
 } from 'lucide-react'
 import Globe, { type Point } from './Globe'
 
@@ -171,6 +172,7 @@ export default function App() {
   const [metric, setMetric] = useState<'count' | 'frp'>('count')
   const [selectedDay, setSelectedDay] = useState(today())
   const [data, setData] = useState<Overview | null>(null)
+  const [selectedFire, setSelectedFire] = useState<Point | null>(null)
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
@@ -262,6 +264,7 @@ export default function App() {
       const body = await res.json()
       if (!res.ok) throw Error(body.detail || 'FIRMS sync failed')
       await load()
+      setSelectedFire(null)
       setSelectedDay(today())
     } catch (e) {
       setError((e as Error).message)
@@ -286,6 +289,10 @@ export default function App() {
                 ? c.viirs_count
                 : c.modis_count + c.viirs_count,
           kind: layer,
+          modisCount: c.modis_count,
+          viirsCount: c.viirs_count,
+          modisFrp: c.modis_frp,
+          viirsFrp: c.viirs_frp,
         })),
     [cells, layer],
   )
@@ -396,7 +403,10 @@ export default function App() {
               <select
                 aria-label="Choose a region"
                 value={region}
-                onChange={(e) => setRegion(e.target.value as keyof typeof regions)}
+                onChange={(e) => {
+                  setSelectedFire(null)
+                  setRegion(e.target.value as keyof typeof regions)
+                }}
               >
                 {Object.keys(regions).map((r) => (
                   <option key={r}>{r}</option>
@@ -412,7 +422,10 @@ export default function App() {
                 value={selectedDay}
                 min={data?.series[0]?.day}
                 max={today()}
-                onChange={(e) => setSelectedDay(e.target.value)}
+                onChange={(e) => {
+                  setSelectedFire(null)
+                  setSelectedDay(e.target.value)
+                }}
               />
             </div>
             <span className="toolbar-spacer" />
@@ -493,6 +506,8 @@ export default function App() {
                   key={region}
                   points={points}
                   focus={[(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]}
+                  selectedPoint={selectedFire}
+                  onPointSelect={setSelectedFire}
                 />
                 <div className="globe-top-label">
                   SATELLITE OBSERVATIONS <span>•</span> {region.toUpperCase()}
@@ -500,6 +515,29 @@ export default function App() {
                 <div className="globe-bottom-label">
                   DRAG TO ROTATE <span>·</span> {points.length} ACTIVE CELLS
                 </div>
+                {selectedFire && (
+                  <section className="fire-details" aria-label="Selected fire details">
+                    <div className="fire-details-heading">
+                      <span><Flame size={15} /> Fire point details</span>
+                      <button
+                        type="button"
+                        aria-label="Close fire details"
+                        onClick={() => setSelectedFire(null)}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                    <div className="fire-detail-row"><span>Region</span><strong>{region}</strong></div>
+                    {selectedFire.country && (
+                      <div className="fire-detail-row"><span>Country</span><strong>{selectedFire.country}</strong></div>
+                    )}
+                    <div className="fire-detail-row"><span>Observed</span><strong>{selectedDay} UTC</strong></div>
+                    <div className="fire-detail-row"><span>Coordinates</span><strong>{selectedFire.lat.toFixed(2)}°, {selectedFire.lon.toFixed(2)}°</strong></div>
+                    <div className="fire-detail-row"><span>MODIS</span><strong>{nf.format(selectedFire.modisCount)} · {nf.format(Math.round(selectedFire.modisFrp))} MW</strong></div>
+                    <div className="fire-detail-row"><span>VIIRS</span><strong>{nf.format(selectedFire.viirsCount)} · {nf.format(Math.round(selectedFire.viirsFrp))} MW</strong></div>
+                    <p>Grid-cell center from satellite detections; not a fire perimeter.</p>
+                  </section>
+                )}
               </div>
               <div className="layer-row">
                 <div className="layer-switch">
@@ -507,7 +545,10 @@ export default function App() {
                     <button
                       key={l}
                       className={layer === l ? 'selected ' + l.toLowerCase() : ''}
-                      onClick={() => setLayer(l)}
+                      onClick={() => {
+                        setSelectedFire(null)
+                        setLayer(l)
+                      }}
                     >
                       <span className={'layer-dot ' + l.toLowerCase()} />
                       {l === 'HARMONIZED' ? 'Harmonized' : l}
@@ -564,7 +605,10 @@ export default function App() {
                               (iso === selectedDay ? 'selected ' : '') + (hot ? 'has-fire' : '')
                             }
                             disabled={iso > today()}
-                            onClick={() => setSelectedDay(iso)}
+                            onClick={() => {
+                              setSelectedFire(null)
+                              setSelectedDay(iso)
+                            }}
                           >
                             {i + 1}
                           </button>
