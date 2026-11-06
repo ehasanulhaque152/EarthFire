@@ -128,6 +128,48 @@ async def history_month(body: HistoryMonthRequest):
     return data
 
 
+@app.post("/api/ingest/recent")
+async def ingest_recent(body: IngestRequest):
+    bbox = valid_bbox(body.bbox)
+    map_key = os.getenv("FIRMS_MAP_KEY", "")
+    if not map_key:
+        raise HTTPException(503, "FIRMS_MAP_KEY is missing")
+    today = date.today()
+    history_start = today - timedelta(days=16)
+    history_end = today - timedelta(days=3)
+    area = ",".join(f"{v:g}" for v in bbox)
+    async with ingest_lock:
+        try:
+            day = history_start
+            while day <= history_end:
+                chunk_end = min(day + timedelta(days=4), history_end)
+                chunk_days = (chunk_end - day).days + 1
+                for source in SOURCES:
+                    if source not in ("MODIS_NRT", "VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"):
+                        continue
+                    with connect() as db:
+                        cached = db.execute(
+                            "SELECT COUNT(*) FROM ingestions WHERE source=? AND bbox=? AND day BETWEEN ? AND ?",
+                            (source, area, day.isoformat(), chunk_end.isoformat()),
+                        ).fetchone()[0]
+                    if cached < chunk_days:
+                        await ingest(map_key, bbox, chunk_days, [source], day)
+                day = chunk_end + timedelta(days=1)
+            latest = await ingest(map_key, bbox, 3, None, None)
+        except httpx.HTTPStatusError as exc:
+            message = re.sub(r"\\s+", " ", exc.response.text).strip().replace(map_key, "[redacted]")[:180]
+            raise HTTPException(502, f"NASA FIRMS history sync failed: HTTP {exc.response.status_code}. {message}") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"FIRMS history sync failed: {type(exc).__name__}") from exc
+    return {
+        "history_days": (history_end - history_start).days + 1,
+        "received": sum(item["received"] for item in latest),
+        "sources": latest,
+    }
+
+
 @app.post("/api/ingest")
 async def ingest_route(body: IngestRequest):
     global last_ingest_at
