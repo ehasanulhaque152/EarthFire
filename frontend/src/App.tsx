@@ -265,10 +265,10 @@ export default function App() {
     setSyncing(true)
     setError('')
     try {
-      const res = await fetch('/api/ingest', {
+      const res = await fetch('/api/ingest/recent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bbox, days: 3 }),
+        body: JSON.stringify({ bbox }),
       })
       const body = await res.json()
       if (!res.ok) throw Error(body.detail || 'FIRMS sync failed')
