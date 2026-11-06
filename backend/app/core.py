@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
 DB_PATH = Path(os.getenv("EARTHFIRE_DB", ROOT / "data" / "earthfire.sqlite3"))
 FIRMS_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
-SOURCES = {"MODIS_NRT": "MODIS", "VIIRS_SNPP_NRT": "VIIRS", "VIIRS_NOAA20_NRT": "VIIRS", "VIIRS_NOAA21_NRT": "VIIRS", "MODIS_SP": "MODIS", "VIIRS_SNPP_SP": "VIIRS", "VIIRS_NOAA20_SP": "VIIRS"}
+SOURCES = {"MODIS_NRT": "MODIS", "VIIRS_SNPP_NRT": "VIIRS", "VIIRS_NOAA20_NRT": "VIIRS", "VIIRS_NOAA21_NRT": "VIIRS", "MODIS_SP": "MODIS", "VIIRS_SNPP_SP": "VIIRS", "VIIRS_NOAA20_SP": "VIIRS", "VIIRS_NOAA21_SP": "VIIRS"}
 LIVE_SOURCES = ["MODIS_NRT", "VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"]
 GRID_DEG = 0.5
 
