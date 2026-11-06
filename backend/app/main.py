@@ -6,6 +6,7 @@ import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
@@ -88,6 +89,11 @@ async def ingest_route(body: IngestRequest):
             sources = await ingest(os.getenv("FIRMS_MAP_KEY", ""), bbox, body.days, body.sources, body.start_date)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                502,
+                f"NASA FIRMS returned HTTP {exc.response.status_code}. Verify the map key or try again later.",
+            ) from exc
         except Exception as exc:
             raise HTTPException(502, f"FIRMS request failed: {type(exc).__name__}") from exc
         last_ingest_at[cache_key] = time.monotonic()
@@ -99,3 +105,4 @@ async def ingest_route(body: IngestRequest):
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if frontend_dist.is_dir():
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+
