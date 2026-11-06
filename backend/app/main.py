@@ -17,7 +17,7 @@ import json
 
 app = FastAPI(title="EarthFire API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["*"])
-INGEST_COOLDOWN_SECONDS = 60
+INGEST_COOLDOWN_SECONDS = 10
 ingest_lock = asyncio.Lock()
 last_ingest_at: dict[tuple, float] = {}
 
