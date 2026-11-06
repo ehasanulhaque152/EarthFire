@@ -1,6 +1,31 @@
 # EarthFire: project documentation
 
-This guide describes the code in this repository as built on 27 September 2026. EarthFire is an exploratory NASA FIRMS active-fire dashboard. It compares MODIS and VIIRS observations on a common daily grid, stores retrieved observations locally, displays them on a 3D globe, and can train an optional TensorFlow forecast after enough history has been collected. The design follows the architecture supplied for the project; it does not claim scientific sensor calibration or operational fire-risk prediction.
+This guide describes the code in this repository as of 6 November 2026. EarthFire is an exploratory NASA FIRMS active-fire dashboard, with a public demo at [earthfire.onrender.com](https://earthfire.onrender.com/). It compares MODIS and VIIRS observations on a common daily grid, stores retrieved observations locally, displays them on a 3D globe, and can train an optional TensorFlow forecast after enough history has been collected. The design follows the architecture supplied for the project; it does not claim scientific sensor calibration or operational fire-risk prediction.
+
+## Public demo and deployment
+
+The live demo is hosted at [https://earthfire.onrender.com](https://earthfire.onrender.com). The production service is connected to this GitHub repository and uses the root `Dockerfile` plus `render.yaml` as a Render Blueprint. The Docker build uses Node.js 20 to install frontend dependencies and create the Vite production bundle, then Python 3.12 to install the backend requirements and run Uvicorn. FastAPI serves both the API and the built frontend from the same web service and domain.
+
+### Deploying the project on Render
+
+1. Push or merge the desired changes to the repository's `main` branch.
+2. In Render, create a new Blueprint from the repository (or open the existing `earthfire` web service). Render reads `render.yaml`, which selects Docker and `Dockerfile`.
+3. To enable NASA live data, set `FIRMS_MAP_KEY` in the service's **Environment** settings. Keep the key out of source files and commits. The committed SQLite snapshot supports read-only exploration when no key is configured.
+4. This project's Render service currently uses manual deployments. Open the service, choose **Manual Deploy → Deploy latest commit**, and wait until Render reports **Live**.
+5. Open the service URL and check `/api/health` to confirm the API is responding and whether a FIRMS key is configured.
+
+The current Blueprint uses Render's free plan and does not attach a persistent disk. The service may sleep when idle, and SQLite updates stored in the container can be lost when Render replaces or restarts the instance. Use a persistent disk or external database before depending on retained live updates. Manual deployment means a GitHub commit alone does not publish the change until a deploy is started.
+
+### Build and hosting tools
+
+| Tool | How this project uses it |
+| --- | --- |
+| GitHub | Hosts the source repository and deployment branch. |
+| Docker | Builds the frontend and backend into one production image. |
+| Render Blueprint | Reads `render.yaml`, configures the web service and hosts the public site/API. |
+| Render Dashboard | Starts manual deployments and displays build, startup and health status. |
+| Node.js 20 + npm + Vite | Installs frontend packages and compiles the React app for production. |
+| Python 3.12 + FastAPI + Uvicorn | Runs the data API and serves the compiled frontend. |
 
 ## 1. System architecture
 
@@ -24,7 +49,7 @@ NASA FIRMS Area CSV API
          3D globe, calendar, layers, charts
 ```
 
-The browser talks to the local FastAPI server through Vite's `/api` proxy during development. The browser never sends the FIRMS key to NASA. The backend reads the key from `.env` and makes the FIRMS request. SQLite is the historical store; it is not a separate hosted database.
+The browser talks to the FastAPI server through Vite's `/api` proxy in development and through the same Render origin in production. The browser never sends the FIRMS key to NASA. The backend reads it from `.env` locally or Render's `FIRMS_MAP_KEY` environment setting and makes requests. SQLite is the historical store; it is not a separate hosted database.
 
 ## 2. Tools and why they were chosen
 
@@ -54,7 +79,7 @@ https://firms.modaps.eosdis.nasa.gov/api/area/csv/<MAP_KEY>/<SOURCE>/<WEST,SOUTH
 
 `<DAYS>` is 1–5. Without `<START_DATE>`, FIRMS returns its most recent days; with a date, it returns the interval starting on that date. NASA documents the parameters and available sources on the [Area API page](https://firms.modaps.eosdis.nasa.gov/api/area/). Request a free key from NASA's [Map Key page](https://firms.modaps.eosdis.nasa.gov/api/map_key/). The key is a FIRMS access key, not an Earthdata Login password.
 
-The key is stored as `FIRMS_MAP_KEY` in the local `.env` file. `.env` is ignored by Git; `.env.example` contains only a placeholder. `load_dotenv()` runs in `core.py`, and `POST /api/ingest` passes the environment value to `ingest()`. `GET /api/health` returns only whether a key is configured. The API does not include the key in its JSON response. Avoid printing full FIRMS URLs because the key is part of the URL path. If the key is ever published, replace it through NASA's key management page.
+The key is stored as `FIRMS_MAP_KEY` in the local `.env` file. `.env` is ignored by Git; `.env.example` contains only a placeholder. `load_dotenv()` runs in `core.py`, and `POST /api/ingest`, `/api/ingest/recent` and `/api/history/month` pass the environment value to `ingest()`. `GET /api/health` returns only whether a key is configured. The API does not include the key in its JSON response. Avoid printing full FIRMS URLs because the key is part of the URL path. If the key is ever published, replace it through NASA's key management page.
 
 The default live request uses `MODIS_NRT`, `VIIRS_SNPP_NRT`, `VIIRS_NOAA20_NRT`, and `VIIRS_NOAA21_NRT`. `SOURCES` in `core.py` also allows selected standard-processing (`SP`) sources for historical imports. Consult NASA's [Data Availability API](https://firms.modaps.eosdis.nasa.gov/api/data_availability/) for the actual date range of each source before backfilling. NASA distinguishes recent NRT data from delayed SP data in its [API tutorial](https://firms.modaps.eosdis.nasa.gov/content/academy/data_api/firms_api_use.html). As of this document's date, FIRMS also announces an upcoming end to S-NPP delivery on 1 November 2026; update the default source list when NASA's service changes.
 
@@ -128,6 +153,8 @@ The daily series contains separate sensor totals, number of occupied cells and `
 | --- | --- | --- |
 | `GET /api/health` | none | API status, stored detection count, boolean key status. |
 | `GET /api/overview` | `west`, `south`, `east`, `north`, optional `start`, `end` | Daily cells, series, source coverage, method metadata, activity signal, optional saved forecast. Range is capped at 366 days. |
+| `POST /api/ingest/recent` | JSON `bbox` | Fills missing recent coverage for 14 prior days, then refreshes the latest 3 days. Cached days are skipped. |
+| `POST /api/history/month` | JSON `bbox`, `year`, `month` | Loads a calendar month from NRT products for dates within the last 60 days and SP archive products for older dates, then returns cells and daily counts. |
 | `POST /api/ingest` | JSON `bbox`, `days` (1–5), optional `sources`, `start_date` | Per-source received row counts and total. Calls NASA FIRMS. |
 
 Bounding boxes are `[west, south, east, north]` and validated against world coordinate ranges. During local development CORS allows `localhost:5173` and `127.0.0.1:5173`. CORS is not authentication; the ingest endpoint should be protected and rate limited before a public deployment with a private FIRMS key.
@@ -138,7 +165,7 @@ Bounding boxes are `[west, south, east, north]` and validated against world coor
 
 ## 6. Frontend implementation
 
-`frontend/src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. The sync button posts a three-day request to `/api/ingest`, then reloads the overview. The frontend does not embed the FIRMS key.
+`frontend/src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. Sync calls `/api/ingest/recent`, which fills gaps for the preceding 14 days and refreshes the latest three days. The calendar's month/year selectors call `/api/history/month`; results update the calendar, selected-day snapshot and globe points. Older data uses available SP archive products, while the recent window uses NRT products. The frontend does not embed the FIRMS key.
 
 The metric cards show totals for the loaded 30-day window, while the calendar and globe show the selected day. The layer buttons filter that day's cells to MODIS, VIIRS, or all occupied cells. The trends chart uses SVG polylines for sensor counts or FRP. Its displayed “harmonized FRP proxy” uses the larger **daily** sensor FRP total, whereas `core.py` returns the larger sensor sum **per cell** in each cell record. Both are exploratory display proxies and should not be treated as calibrated energy totals. `frontend/src/style.css` defines layout, responsive rules, colors and control states.
 
@@ -191,7 +218,7 @@ For a more defensible future model, compare against a persistence or seasonal ba
 | `backend/requirements.txt` | Core API/runtime Python packages. |
 | `backend/requirements-ml.txt` | Optional TensorFlow dependency for training. |
 | `backend/app/core.py` | `.env` loading, NASA CSV retrieval/parsing, SQLite schema, daily grid, density, FRP proxy and statistical activity calculation. |
-| `backend/app/main.py` | FastAPI routes, input validation, error responses, CORS and saved-forecast freshness check. |
+| `backend/app/main.py` | FastAPI routes, input validation, error responses, CORS, recent-history backfill, calendar month history and saved-forecast freshness check. |
 | `backend/backfill.py` | CLI importer that calls the FIRMS API in five-day chunks. |
 | `backend/train_lstm.py` | Optional TensorFlow/Keras training, chronological holdout, next-day prediction and JSON artifact. |
 | `data/earthfire.sqlite3` | Committed snapshot of NASA FIRMS observations for local exploration. |
@@ -205,7 +232,7 @@ The committed `data/earthfire.sqlite3` is a snapshot. Backend syncs can update t
 
 ### Function and configuration details
 
-**Backend data path.** In `core.py`, `connect()` initializes schema and WAL mode; `parse_rows()` validates and normalizes CSV; `ingest()` fetches and persists each chosen source; `cell_key()` assigns integer grid indexes; `cell_area_km2()` computes the spherical cell-area estimate; `summarize()` produces cell and daily responses; and `statistical_risk()` computes the relative activity signal. In `main.py`, `valid_bbox()` rejects reversed or out-of-range coordinates, `health()` checks local readiness, `overview()` builds the dashboard response and conditionally loads a fresh forecast, and `ingest_route()` validates and calls NASA ingestion. `backfill.py` is a command-line wrapper around `ingest()`.
+**Backend data path.** In `core.py`, `connect()` initializes schema and WAL mode; `parse_rows()` validates and normalizes CSV; `ingest()` fetches and persists each chosen source; `cell_key()` assigns integer grid indexes; `cell_area_km2()` computes the spherical cell-area estimate; `summarize()` produces cell and daily responses; and `statistical_risk()` computes the relative activity signal. In `main.py`, `valid_bbox()` rejects reversed or out-of-range coordinates, `health()` checks local readiness, `overview()` builds the dashboard response and conditionally loads a fresh forecast, `ingest_route()` validates and calls NASA ingestion, `ingest_recent()` fills the recent coverage window while skipping cached chunks, and `history_month()` retrieves the selected calendar month. `backfill.py` is a command-line wrapper around `ingest()`.
 
 **Forecast path.** In `train_lstm.py`, `artifact_path()` maps a region to a stable local JSON filename, `fit_lstm()` constructs 14-day windows and trains/evaluates the model, and `train()` retrieves the latest uninterrupted covered series and saves a forecast. The `__main__` block parses `--bbox` and `--epochs`. `backend/requirements-ml.txt` is deliberately separate so users who only run the website do not download TensorFlow.
 
