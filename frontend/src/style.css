@@ -1189,3 +1189,16 @@ footer { color: #6e7681; letter-spacing: 0.4px; }
   .app-shell { display: block; }
 }
 
+
+.calendar-period { display: flex; align-items: center; gap: 6px; }
+.calendar-period select {
+  color: #e6edf3;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 11px;
+}
+.calendar-period select:focus { outline: 2px solid #1f6feb; outline-offset: 1px; }
+.calendar-period select option { background: #161b22; }
