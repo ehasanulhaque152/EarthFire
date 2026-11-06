@@ -178,7 +178,10 @@ export default function App() {
   const [error, setError] = useState('')
   const [backendReady, setBackendReady] = useState(false)
   const [configured, setConfigured] = useState(false)
-  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState(today().slice(0, 7))
+  const [calendarData, setCalendarData] = useState<Overview | null>(null)
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const historyRequest = useRef(0)
   const syncInFlight = useRef(false)
   const bbox = regions[region]
   async function load() {
@@ -219,6 +222,7 @@ export default function App() {
         showingSavedSnapshot = true
       }
       setData(overview)
+      setCalendarData(overview)
       setBackendReady(true)
       setError(
         showingSavedSnapshot
@@ -226,6 +230,8 @@ export default function App() {
           : '',
       )
       const latestActive = [...overview.series].reverse().find((d) => d.occupied_cells > 0)
+      const initialDay = latestActive?.day || end
+      setCalendarMonth(initialDay.slice(0, 7))
       if (latestActive) setSelectedDay(latestActive.day)
       else if (showingSavedSnapshot) setSelectedDay(end)
       setConfigured(health.firms_configured)
@@ -285,7 +291,34 @@ export default function App() {
       window.clearInterval(refresh)
     }
   }, [backendReady, configured, region])
-  const cells = data?.cells.filter((c) => c.day === selectedDay) || []
+  async function loadCalendarMonth(monthKey: string, requestedDay?: string) {
+    setCalendarMonth(monthKey)
+    const requestId = ++historyRequest.current
+    const [year, month] = monthKey.split('-').map(Number)
+    setCalendarLoading(true)
+    setError('')
+    try {
+      const response = await fetch('/api/history/month', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bbox, year, month }),
+      })
+      const body = await response.json()
+      if (!response.ok) throw Error(body.detail || 'Could not load fire history')
+      if (requestId !== historyRequest.current) return
+      setCalendarData(body)
+      setSelectedFire(null)
+      const lastDay = `${monthKey}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`
+      const chosenDay = requestedDay?.slice(0, 7) === monthKey ? requestedDay : lastDay
+      setSelectedDay(chosenDay > body.end ? body.end : chosenDay)
+    } catch (e) {
+      if (requestId === historyRequest.current) setError((e as Error).message)
+    } finally {
+      if (requestId === historyRequest.current) setCalendarLoading(false)
+    }
+  }
+  const calendarSeries = calendarData?.series || data?.series || []
+  const cells = (calendarData || data)?.cells.filter((c) => c.day === selectedDay) || []
   const points: Point[] = useMemo(
     () =>
       cells
@@ -309,7 +342,7 @@ export default function App() {
         })),
     [cells, layer],
   )
-  const daily = data?.series.find((d) => d.day === selectedDay)
+  const daily = calendarSeries.find((d) => d.day === selectedDay)
   const total = data?.series.reduce((s, d) => s + d.modis_count + d.viirs_count, 0) || 0
   const activeDays = data?.series.filter((d) => d.occupied_cells > 0).length || 0
   const coveredDays = data?.series.filter((d) => d.covered_sources >= 2).length || 0
@@ -433,11 +466,15 @@ export default function App() {
               <input
                 type="date"
                 value={selectedDay}
-                min={data?.series[0]?.day}
+                min="2000-01-01"
                 max={today()}
                 onChange={(e) => {
-                  setSelectedFire(null)
-                  setSelectedDay(e.target.value)
+                  const value = e.target.value
+                  if (value.slice(0, 7) !== calendarMonth || !calendarSeries.some((d) => d.day === value)) void loadCalendarMonth(value.slice(0, 7), value)
+                  else {
+                    setSelectedFire(null)
+                    setSelectedDay(value)
+                  }
                 }}
               />
             </div>
@@ -582,15 +619,21 @@ export default function App() {
                 <CalendarDays size={18} className="dim-icon" />
               </div>
               <div className="calendar-head">
-                <button onClick={() => setCalendarOpen(!calendarOpen)}>
-                  {new Date(selectedDay + 'T12:00:00Z').toLocaleString('en-US', {
-                    month: 'long',
-                    year: 'numeric',
-                    timeZone: 'UTC',
-                  })}{' '}
-                  <ChevronDown size={15} />
-                </button>
-                <span>UTC</span>
+                <div className="calendar-period">
+                  <select aria-label="Choose calendar month" value={Number(calendarMonth.slice(5))} disabled={calendarLoading}
+                    onChange={(e) => void loadCalendarMonth(`${calendarMonth.slice(0, 4)}-${String(Number(e.target.value)).padStart(2, '0')}`)}>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>{new Date(Date.UTC(2000, m - 1, 1)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })}</option>
+                    ))}
+                  </select>
+                  <select aria-label="Choose calendar year" value={Number(calendarMonth.slice(0, 4))} disabled={calendarLoading}
+                    onChange={(e) => void loadCalendarMonth(`${e.target.value}-${calendarMonth.slice(5)}`)}>
+                    {Array.from({ length: new Date().getUTCFullYear() - 1999 }, (_, i) => new Date().getUTCFullYear() - i).map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <span>{calendarLoading ? 'Loading…' : 'UTC'}</span>
               </div>
               <div className="calendar-grid">
                 {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
@@ -599,9 +642,8 @@ export default function App() {
                   </div>
                 ))}
                 {(() => {
-                  const date = new Date(selectedDay + 'T12:00:00Z'),
-                    year = date.getUTCFullYear(),
-                    month = date.getUTCMonth(),
+                  const year = Number(calendarMonth.slice(0, 4)),
+                    month = Number(calendarMonth.slice(5)) - 1,
                     offset = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7,
                     days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
                   return [...Array(offset)]
@@ -609,7 +651,7 @@ export default function App() {
                     .concat(
                       [...Array(days)].map((_, i) => {
                         const iso = dayString(new Date(Date.UTC(year, month, i + 1))),
-                          entry = data?.series.find((d) => d.day === iso),
+                          entry = calendarSeries.find((d) => d.day === iso),
                           hot = !!entry?.occupied_cells
                         return (
                           <button
@@ -617,10 +659,13 @@ export default function App() {
                             className={
                               (iso === selectedDay ? 'selected ' : '') + (hot ? 'has-fire' : '')
                             }
-                            disabled={iso > today()}
+                            disabled={iso > today() || calendarLoading}
                             onClick={() => {
-                              setSelectedFire(null)
-                              setSelectedDay(iso)
+                              if (!calendarSeries.some((d) => d.day === iso)) void loadCalendarMonth(iso.slice(0, 7), iso)
+                              else {
+                                setSelectedFire(null)
+                                setSelectedDay(iso)
+                              }
                             }}
                           >
                             {i + 1}
@@ -630,9 +675,6 @@ export default function App() {
                     )
                 })()}
               </div>
-              {calendarOpen && (
-                <div className="calendar-hint">Choose a day to update the globe and snapshot.</div>
-              )}
               <div className="snapshot-divider" />
               <div className="snapshot-title">
                 {new Date(selectedDay + 'T12:00:00Z').toLocaleString('en-US', {
@@ -661,7 +703,7 @@ export default function App() {
                 <b>{nf.format(daily?.occupied_cells || 0)}</b>
               </div>
               <div className="snapshot-cta">
-                {activeDays} days with detections in this 30-day window <ArrowRight size={15} />
+                {calendarSeries.filter((d) => d.occupied_cells > 0).length} days with detections this month <ArrowRight size={15} />
               </div>
             </section>
           </div>
