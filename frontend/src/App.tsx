@@ -346,7 +346,7 @@ export default function App() {
           </div>
           <div className="top-actions">
             <span className={'connection ' + (backendReady ? 'online' : 'offline')}>
-              <span /> {backendReady ? 'API connected' : 'API offline'}
+              <span /> {backendReady ? 'Server online' : 'Connecting…'}
             </span>
             <a
               className="help-link"
@@ -394,6 +394,7 @@ export default function App() {
             <div className="region-select">
               <MapPin size={17} />
               <select
+                aria-label="Choose a region"
                 value={region}
                 onChange={(e) => setRegion(e.target.value as keyof typeof regions)}
               >
@@ -416,7 +417,8 @@ export default function App() {
             </div>
             <span className="toolbar-spacer" />
             <div className="freshness">
-              <Radio size={15} /> {coveredDays}/30 days synced · Updated: {lastSync}
+              <Radio size={15} />{' '}
+              {loading ? `Loading ${region}…` : `${coveredDays}/30 days synced · Updated: ${lastSync}`}
             </div>
           </div>
           <section className="metrics">
