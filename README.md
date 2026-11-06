@@ -1,6 +1,6 @@
 # EarthFire
 
-EarthFire is a local NASA FIRMS explorer for comparing MODIS and VIIRS active-fire detections. It has a FastAPI/SQLite ingestion and analysis service, a React/Three.js dashboard, daily 0.5° spatial grid, statistical activity signal, and an optional LSTM next-day occupied-cell forecast.
+EarthFire is a public NASA FIRMS explorer for comparing MODIS and VIIRS active-fire detections. [Open the live dashboard](https://earthfire.onrender.com/). Read the [detailed project and deployment guide](docs/PROJECT_DOCUMENTATION.md). It has a FastAPI/SQLite ingestion and analysis service, a React/Three.js dashboard, daily 0.5° spatial grid, statistical activity signal, and an optional LSTM next-day occupied-cell forecast.
 
 The linked 2026 Space Apps challenge statement was unavailable when this project was created, so the implementation follows the architecture supplied in the request. Check the official challenge statement and participation rules before using this as a hackathon submission.
 
@@ -27,7 +27,7 @@ Run the API and dashboard as described below, then open [the local preview](http
 
 ## Public demo deployment
 
-This repository includes a Render Blueprint and Dockerfile for a single-service public demo. Connect the repository to Render using the `render.yaml` Blueprint; Render will build the frontend and serve it alongside the FastAPI API. The committed observation snapshot is included, so `FIRMS_MAP_KEY` is not needed to view the dashboard. Leave the key unset to keep live ingestion disabled. The free web service may sleep after inactivity, and data written to its local SQLite database is temporary. See [Render's free service limits](https://render.com/docs/free) before enabling live ingestion or relying on saved updates.
+This repository includes a Render Blueprint and multi-stage Dockerfile for the public demo at [earthfire.onrender.com](https://earthfire.onrender.com/). The image builds the React/Vite frontend with Node.js, then installs and runs the FastAPI backend with Python. To deploy your own copy, connect the GitHub repository to Render as a Blueprint so it reads `render.yaml`; add `FIRMS_MAP_KEY` under the service's Environment settings if live FIRMS sync is needed; then use **Manual Deploy → Deploy latest commit**. The service currently uses manual deploys. The committed observation snapshot lets visitors explore without a key. The free service may sleep while idle, and this configuration has no persistent disk, so newly ingested SQLite data can be lost when the instance restarts. See [Render's free service limits](https://render.com/docs/free) before relying on live writes.
 
 ## Start
 
@@ -55,9 +55,9 @@ Requires Node.js 20+ and Python 3.11+.
    npm run dev
    ```
 
-5. Click **Sync latest data**. The selected region bounds are sent to the API, which downloads the latest 3 days from MODIS NRT and VIIRS S-NPP/NOAA-20/NOAA-21 NRT. A successful sync is saved in `data/earthfire.sqlite3`.
+5. Click **Sync latest data**. The API fills missing coverage for the preceding 14 days, refreshes the latest 3 days from MODIS and VIIRS near-real-time sources, and saves the result in `data/earthfire.sqlite3`. Cached historical days are skipped. In the dashboard, use the calendar's month and year selectors to load older FIRMS history for the selected region.
 
-API docs: http://127.0.0.1:8000/docs. The POST `/api/ingest` endpoint accepts a bounding box, 1–5 day range, source list, and optional `start_date` for historical requests.
+API docs: http://127.0.0.1:8000/docs. `POST /api/ingest/recent` backfills recent coverage and refreshes the latest 3 days. `POST /api/history/month` loads a selected month using recent NRT or archived SP sources when available. `POST /api/ingest` accepts a bounding box, 1–5 day range, source list, and optional `start_date` for manual requests.
 
 ## Historical data and LSTM
 
