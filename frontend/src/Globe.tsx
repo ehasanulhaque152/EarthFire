@@ -8,6 +8,11 @@ export type Point = {
   lon: number
   value: number
   kind: 'MODIS' | 'VIIRS' | 'HARMONIZED'
+  modisCount: number
+  viirsCount: number
+  modisFrp: number
+  viirsFrp: number
+  country?: string
 }
 const R = 2
 function xyz(lat: number, lon: number, r = R) {
@@ -20,10 +25,24 @@ function xyz(lat: number, lon: number, r = R) {
   )
 }
 
-export default function Globe({ points, focus }: { points: Point[]; focus: [number, number] }) {
+export default function Globe({
+  points,
+  focus,
+  selectedPoint,
+  onPointSelect,
+}: {
+  points: Point[]
+  focus: [number, number]
+  selectedPoint: Point | null
+  onPointSelect: (point: Point) => void
+}) {
   const holder = useRef<HTMLDivElement>(null)
   const pointsRef = useRef(points)
+  const selectedPointRef = useRef(selectedPoint)
+  const onPointSelectRef = useRef(onPointSelect)
   pointsRef.current = points
+  selectedPointRef.current = selectedPoint
+  onPointSelectRef.current = onPointSelect
   useEffect(() => {
     const el = holder.current!
     const scene = new THREE.Scene()
@@ -80,7 +99,12 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
     const countries = feature(
       world as never,
       (world as unknown as { objects: { countries: never } }).objects.countries,
-    ) as unknown as { features: { geometry: { type: string; coordinates: unknown } }[] }
+    ) as unknown as {
+      features: {
+        properties?: { name?: string }
+        geometry: { type: string; coordinates: unknown }
+      }[]
+    }
     for (const country of countries.features) {
       const geometry = country.geometry
       const polygons =
@@ -137,13 +161,22 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
         ;(child.material as THREE.Material).dispose()
       }
       for (const p of pointsRef.current.slice(0, 1000)) {
-        const color = p.kind === 'MODIS' ? 0xffa04d : p.kind === 'VIIRS' ? 0x48d9de : 0xff6c50
-        const size = Math.min(0.09, 0.045 + Math.log1p(p.value) * 0.01)
+        const isSelected =
+          selectedPointRef.current?.lat === p.lat && selectedPointRef.current?.lon === p.lon
+        const color = isSelected
+          ? 0xffffff
+          : p.kind === 'MODIS'
+            ? 0xffa04d
+            : p.kind === 'VIIRS'
+              ? 0x48d9de
+              : 0xff6c50
+        const size = Math.min(0.09, 0.045 + Math.log1p(p.value) * 0.01) * (isSelected ? 1.5 : 1)
         const mesh = new THREE.Mesh(
           new THREE.SphereGeometry(size, 8, 8),
           new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }),
         )
         mesh.position.copy(xyz(p.lat, p.lon, 2.022))
+        mesh.userData.point = p
         markerGroup.add(mesh)
       }
     }
@@ -158,17 +191,40 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
     observer.observe(el)
     resize()
     let dragging = false,
+      didMove = false,
+      startX = 0,
+      startY = 0,
       lastX = 0,
       lastY = 0,
       raf = 0
+    const raycaster = new THREE.Raycaster()
+    const pointer = new THREE.Vector2()
+    const pointAtPointer = (e: PointerEvent) => {
+      const bounds = renderer.domElement.getBoundingClientRect()
+      pointer.set(
+        ((e.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((e.clientY - bounds.top) / bounds.height) * 2 + 1,
+      )
+      raycaster.setFromCamera(pointer, camera)
+      const hit = raycaster.intersectObjects(markerGroup.children, false)[0]
+      return hit?.object.userData.point as Point | undefined
+    }
     const down = (e: PointerEvent) => {
       dragging = true
+      didMove = false
+      startX = e.clientX
+      startY = e.clientY
       lastX = e.clientX
       lastY = e.clientY
       el.setPointerCapture(e.pointerId)
     }
     const move = (e: PointerEvent) => {
-      if (!dragging) return
+      if (!dragging) {
+        el.style.cursor = pointAtPointer(e) ? 'pointer' : 'grab'
+        return
+      }
+      if (!didMove && Math.hypot(e.clientX - startX, e.clientY - startY) > 4) didMove = true
+      if (!didMove) return
       globe.rotation.y += (e.clientX - lastX) * 0.005
       globe.rotation.x = Math.max(
         -1.3,
@@ -177,12 +233,42 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
       lastX = e.clientX
       lastY = e.clientY
     }
-    const up = () => {
+    const up = (e: PointerEvent) => {
+      if (dragging && !didMove) {
+        const point = pointAtPointer(e)
+        if (point) {
+          const inRing = (lon: number, lat: number, ring: number[][]) => {
+            let inside = false
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+              const [xi, yi] = ring[i]
+              const [xj, yj] = ring[j]
+              if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi)
+                inside = !inside
+            }
+            return inside
+          }
+          const country = countries.features.find((item) => {
+            const geometry = item.geometry
+            const polygons =
+              geometry.type === 'Polygon'
+                ? [geometry.coordinates]
+                : geometry.type === 'MultiPolygon'
+                  ? geometry.coordinates
+                  : []
+            return (polygons as number[][][][]).some(
+              (polygon) => polygon[0] && inRing(point.lon, point.lat, polygon[0]),
+            )
+          })
+          onPointSelectRef.current({ ...point, country: country?.properties?.name || 'Unknown' })
+        }
+      }
       dragging = false
+      el.style.cursor = 'grab'
     }
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
     function animate() {
       if (disposed) return
       renderer.render(scene, camera)
@@ -200,6 +286,7 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
       renderer.dispose()
       earthTexture.dispose()
       el.removeChild(renderer.domElement)
@@ -207,7 +294,7 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
   }, [])
   useEffect(() => {
     ;(holder.current as HTMLDivElement & { updateMarkers?: () => void })?.updateMarkers?.()
-  }, [points])
+  }, [points, selectedPoint])
   return (
     <div
       className="globe-canvas"
@@ -216,3 +303,4 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
     />
   )
 }
+
