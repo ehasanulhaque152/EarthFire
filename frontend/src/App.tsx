@@ -206,15 +206,29 @@ export default function App() {
       const latestActive = [...overview.series].reverse().find((d) => d.occupied_cells > 0)
       if (latestActive) setSelectedDay(latestActive.day)
       setConfigured(health.firms_configured)
+      return true
     } catch {
       setBackendReady(false)
-      setError('Start the FastAPI server to load FIRMS data.')
+      setError('Waiting for EarthFire data service. Reconnecting…')
+      return false
     } finally {
       setLoading(false)
     }
   }
   useEffect(() => {
-    load()
+    let cancelled = false
+    let retryTimer: number | undefined
+    const connect = async (attempt: number) => {
+      const ready = await load()
+      if (!ready && !cancelled && attempt < 8) {
+        retryTimer = window.setTimeout(() => void connect(attempt + 1), 10_000)
+      }
+    }
+    void connect(0)
+    return () => {
+      cancelled = true
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+    }
   }, [region])
   async function sync() {
     setSyncing(true)
@@ -644,3 +658,4 @@ export default function App() {
     </div>
   )
 }
+
