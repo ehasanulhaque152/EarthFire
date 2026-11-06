@@ -185,7 +185,7 @@ export default function App() {
         if (!r.ok) throw Error('API unavailable')
         return r.json()
       })
-      const end = !health.firms_configured && health.latest_observation_day
+      let end = !health.firms_configured && health.latest_observation_day
           ? health.latest_observation_day
           : today(),
         start = dayString(new Date(Date.parse(`${end}T00:00:00Z`) - 29 * 86400000))
@@ -197,14 +197,34 @@ export default function App() {
         start,
         end,
       })
-      const response = await fetch(`/api/overview?${params}`)
+      let response = await fetch(`/api/overview?${params}`)
       if (!response.ok) throw Error('API unavailable')
-      const overview: Overview = await response.json()
+      let overview: Overview = await response.json()
+      let showingSavedSnapshot = false
+      if (
+        overview.total_detections === 0 &&
+        health.latest_observation_day &&
+        health.latest_observation_day < start
+      ) {
+        end = health.latest_observation_day
+        const snapshotStart = dayString(new Date(Date.parse(`${end}T00:00:00Z`) - 29 * 86400000))
+        params.set('start', snapshotStart)
+        params.set('end', end)
+        response = await fetch(`/api/overview?${params}`)
+        if (!response.ok) throw Error('API unavailable')
+        overview = await response.json()
+        showingSavedSnapshot = true
+      }
       setData(overview)
       setBackendReady(true)
-      setError('')
+      setError(
+        showingSavedSnapshot
+          ? `Showing the saved NASA snapshot through ${end}; live sync has not added newer observations.`
+          : '',
+      )
       const latestActive = [...overview.series].reverse().find((d) => d.occupied_cells > 0)
       if (latestActive) setSelectedDay(latestActive.day)
+      else if (showingSavedSnapshot) setSelectedDay(end)
       setConfigured(health.firms_configured)
       return true
     } catch {
