@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   ArrowDownRight,
@@ -179,6 +179,7 @@ export default function App() {
   const [backendReady, setBackendReady] = useState(false)
   const [configured, setConfigured] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const syncInFlight = useRef(false)
   const bbox = regions[region]
   async function load() {
     setLoading(true)
@@ -253,6 +254,8 @@ export default function App() {
     }
   }, [region])
   async function sync() {
+    if (syncInFlight.current) return
+    syncInFlight.current = true
     setSyncing(true)
     setError('')
     try {
@@ -269,9 +272,19 @@ export default function App() {
     } catch (e) {
       setError((e as Error).message)
     } finally {
+      syncInFlight.current = false
       setSyncing(false)
     }
   }
+  useEffect(() => {
+    if (!backendReady || !configured) return
+    const initialSync = window.setTimeout(() => void sync(), 1500)
+    const refresh = window.setInterval(() => void sync(), 11 * 60 * 1000)
+    return () => {
+      window.clearTimeout(initialSync)
+      window.clearInterval(refresh)
+    }
+  }, [backendReady, configured, region])
   const cells = data?.cells.filter((c) => c.day === selectedDay) || []
   const points: Point[] = useMemo(
     () =>
