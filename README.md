@@ -25,6 +25,10 @@ Run the API and dashboard as described below, then open [the local preview](http
 
 [![EarthFire walkthrough poster](docs/earthfire-walkthrough-poster.png)](docs/earthfire-walkthrough.mp4)
 
+## Public demo deployment
+
+This repository includes a Render Blueprint and Dockerfile for a single-service public demo. Connect the repository to Render using the `render.yaml` Blueprint; Render will build the frontend and serve it alongside the FastAPI API. The committed observation snapshot is included, so `FIRMS_MAP_KEY` is not needed to view the dashboard. Leave the key unset to keep live ingestion disabled. The free web service may sleep after inactivity, and data written to its local SQLite database is temporary. See [Render's free service limits](https://render.com/docs/free) before enabling live ingestion or relying on saved updates.
+
 ## Start
 
 Requires Node.js 20+ and Python 3.11+.
@@ -82,3 +86,5 @@ The API and dashboard show the saved forecast when it was trained through the la
 - The LSTM is optional and reports holdout mean absolute error. Its output is experimental and should not be used for emergency decisions.
 
 Data source: [NASA FIRMS area API](https://firms.modaps.eosdis.nasa.gov/api/area/) and [FIRMS data documentation](https://firms.modaps.eosdis.nasa.gov/content/academy/data_api/firms_api_use.html).
+
+The globe surface uses NASA Earth Observatory's [Blue Marble: Next Generation base map](https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/base-map/) (January, 5400 × 2700 JPEG), included locally at `frontend/public/textures/earth-blue-marble.jpg`.

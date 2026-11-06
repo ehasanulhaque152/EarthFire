@@ -1,9 +1,13 @@
 from datetime import date, timedelta
+import asyncio
 import os
+from pathlib import Path
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
 
 from .core import SOURCES, connect, ingest, statistical_risk, summarize
 from backend.train_lstm import artifact_path
@@ -11,6 +15,9 @@ import json
 
 app = FastAPI(title="EarthFire API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["*"])
+INGEST_COOLDOWN_SECONDS = 600
+ingest_lock = asyncio.Lock()
+last_ingest_at: dict[tuple, float] = {}
 
 
 class IngestRequest(BaseModel):
@@ -31,7 +38,13 @@ def valid_bbox(bbox):
 def health():
     with connect() as db:
         rows = db.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
-    return {"status": "ok", "detections": rows, "firms_configured": bool(os.getenv("FIRMS_MAP_KEY"))}
+        latest_observation_day = db.execute("SELECT MAX(day) FROM detections").fetchone()[0]
+    return {
+        "status": "ok",
+        "detections": rows,
+        "latest_observation_day": latest_observation_day,
+        "firms_configured": bool(os.getenv("FIRMS_MAP_KEY")),
+    }
 
 
 @app.get("/api/overview")
@@ -62,13 +75,27 @@ def overview(
 
 @app.post("/api/ingest")
 async def ingest_route(body: IngestRequest):
+    global last_ingest_at
     bbox = valid_bbox(body.bbox)
     if body.sources and any(s not in SOURCES for s in body.sources):
         raise HTTPException(422, "Unknown FIRMS source")
-    try:
-        sources = await ingest(os.getenv("FIRMS_MAP_KEY", ""), bbox, body.days, body.sources, body.start_date)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(502, f"FIRMS request failed: {type(exc).__name__}") from exc
+    cache_key = (bbox, tuple(body.sources or ()), body.days, body.start_date)
+    async with ingest_lock:
+        remaining = INGEST_COOLDOWN_SECONDS - (time.monotonic() - last_ingest_at.get(cache_key, 0))
+        if remaining > 0:
+            raise HTTPException(429, f"This region was synced recently. Try again in {int(remaining) + 1} seconds.")
+        try:
+            sources = await ingest(os.getenv("FIRMS_MAP_KEY", ""), bbox, body.days, body.sources, body.start_date)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"FIRMS request failed: {type(exc).__name__}") from exc
+        last_ingest_at[cache_key] = time.monotonic()
     return {"sources": sources, "received": sum(s["received"] for s in sources)}
+
+
+# In the deployed container, serve the built React app from the same origin as
+# the API. Local development keeps using Vite's /api proxy instead.
+frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")

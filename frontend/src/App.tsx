@@ -181,8 +181,14 @@ export default function App() {
   async function load() {
     setLoading(true)
     try {
-      const end = today(),
-        start = dayString(new Date(Date.now() - 29 * 86400000))
+      const health = await fetch('/api/health').then((r) => {
+        if (!r.ok) throw Error('API unavailable')
+        return r.json()
+      })
+      const end = !health.firms_configured && health.latest_observation_day
+          ? health.latest_observation_day
+          : today(),
+        start = dayString(new Date(Date.parse(`${end}T00:00:00Z`) - 29 * 86400000))
       const params = new URLSearchParams({
         west: String(bbox[0]),
         south: String(bbox[1]),
@@ -199,7 +205,6 @@ export default function App() {
       setError('')
       const latestActive = [...overview.series].reverse().find((d) => d.occupied_cells > 0)
       if (latestActive) setSelectedDay(latestActive.day)
-      const health = await fetch('/api/health').then((r) => r.json())
       setConfigured(health.firms_configured)
     } catch {
       setBackendReady(false)

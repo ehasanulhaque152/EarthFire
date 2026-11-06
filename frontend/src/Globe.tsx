@@ -28,19 +28,22 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
     const el = holder.current!
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
-    camera.position.set(0, 0, 7.5)
+    camera.position.set(0, 0, 6.5)
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
     el.appendChild(renderer.domElement)
     const globe = new THREE.Group()
     scene.add(globe)
+    const earthTexture = new THREE.TextureLoader().load('/textures/earth-blue-marble.jpg')
+    earthTexture.colorSpace = THREE.SRGBColorSpace
+    earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
     const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(R, 64, 64),
-      new THREE.MeshPhongMaterial({
-        color: 0x102934,
-        emissive: 0x071c27,
-        shininess: 18,
-        specular: 0x294958,
+      new THREE.SphereGeometry(R, 128, 96),
+      new THREE.MeshStandardMaterial({
+        map: earthTexture,
+        roughness: 0.92,
+        metalness: 0,
       }),
     )
     globe.add(sphere)
@@ -55,9 +58,9 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
     )
     globe.add(atmosphere)
     const gridMaterial = new THREE.LineBasicMaterial({
-      color: 0x2a5966,
+      color: 0x9bc6d1,
       transparent: true,
-      opacity: 0.24,
+      opacity: 0.1,
     })
     for (let lat = -60; lat <= 60; lat += 30) {
       const coordinates = []
@@ -70,9 +73,9 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
       globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(coordinates), gridMaterial))
     }
     const coastMaterial = new THREE.LineBasicMaterial({
-      color: 0x6ba5a9,
+      color: 0xc1d8d2,
       transparent: true,
-      opacity: 0.68,
+      opacity: 0.22,
     })
     const countries = feature(
       world as never,
@@ -96,10 +99,13 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
         }
       }
     }
-    const light = new THREE.DirectionalLight(0xbee8ed, 2.1)
-    light.position.set(-3, 4, 5)
+    const light = new THREE.DirectionalLight(0xffffff, 2.5)
+    light.position.set(-3, 3, 5)
     scene.add(light)
-    scene.add(new THREE.AmbientLight(0x8daab4, 0.72))
+    scene.add(new THREE.AmbientLight(0xc3d4dc, 1.15))
+    const rimLight = new THREE.DirectionalLight(0x4588c3, 1.25)
+    rimLight.position.set(4, -1, -4)
+    scene.add(rimLight)
     const starGeo = new THREE.BufferGeometry(),
       starPos = [] as number[]
     for (let i = 0; i < 550; i++) {
@@ -195,6 +201,7 @@ export default function Globe({ points, focus }: { points: Point[]; focus: [numb
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
       renderer.dispose()
+      earthTexture.dispose()
       el.removeChild(renderer.domElement)
     }
   }, [])

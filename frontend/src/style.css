@@ -539,6 +539,7 @@ h2 {
   position: relative;
   flex: 1;
   min-height: 0;
+  background: radial-gradient(ellipse at 50% 58%, #193348 0%, #0b1722 73%);
 }
 .globe-canvas {
   position: absolute;

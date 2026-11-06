@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: earthfire
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: FIRMS_MAP_KEY
+        sync: false
