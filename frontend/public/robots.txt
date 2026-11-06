@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://earthfire.onrender.com/sitemap.xml
