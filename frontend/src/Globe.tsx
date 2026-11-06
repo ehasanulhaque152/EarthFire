@@ -269,6 +269,11 @@ export default function Globe({
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
     el.addEventListener('pointercancel', up)
+    const zoom = (e: WheelEvent) => {
+      e.preventDefault()
+      camera.position.z = Math.max(3.1, Math.min(10, camera.position.z + e.deltaY * 0.004))
+    }
+    el.addEventListener('wheel', zoom, { passive: false })
     function animate() {
       if (disposed) return
       renderer.render(scene, camera)
@@ -287,6 +292,7 @@ export default function Globe({
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
+      el.removeEventListener('wheel', zoom)
       renderer.dispose()
       earthTexture.dispose()
       el.removeChild(renderer.domElement)
@@ -299,7 +305,7 @@ export default function Globe({
     <div
       className="globe-canvas"
       ref={holder}
-      aria-label="Interactive three dimensional globe showing fire hotspots"
+      aria-label="Interactive three dimensional globe. Click fire hotspots for country details, drag to rotate, and scroll to zoom."
     />
   )
 }
