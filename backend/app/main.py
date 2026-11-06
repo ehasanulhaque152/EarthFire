@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import calendar
 import asyncio
 import os
 from pathlib import Path
@@ -20,6 +21,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 INGEST_COOLDOWN_SECONDS = 1
 ingest_lock = asyncio.Lock()
 last_ingest_at: dict[tuple, float] = {}
+
+
+class HistoryMonthRequest(BaseModel):
+    bbox: tuple[float, float, float, float] = (-130, 20, -60, 55)
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
 
 
 class IngestRequest(BaseModel):
@@ -72,6 +79,52 @@ def overview(
         data["forecast"] = forecast if recent and forecast.get("trained_through") == covered_days[-1] else None
     else:
         data["forecast"] = None
+    return data
+
+
+@app.post("/api/history/month")
+async def history_month(body: HistoryMonthRequest):
+    bbox = valid_bbox(body.bbox)
+    today = date.today()
+    if (body.year, body.month) > (today.year, today.month):
+        raise HTTPException(422, "Choose a month that has started")
+    start = date(body.year, body.month, 1)
+    end = min(date(body.year, body.month, calendar.monthrange(body.year, body.month)[1]), today)
+    source_families = [
+        ("MODIS_NRT", "MODIS_SP"),
+        ("VIIRS_SNPP_NRT", "VIIRS_SNPP_SP"),
+        ("VIIRS_NOAA20_NRT", "VIIRS_NOAA20_SP"),
+        ("VIIRS_NOAA21_NRT", "VIIRS_NOAA21_SP"),
+    ]
+    map_key = os.getenv("FIRMS_MAP_KEY", "")
+    if map_key:
+        area = ",".join(f"{v:g}" for v in bbox)
+        async with ingest_lock:
+            try:
+                day = start
+                while day <= end:
+                    chunk_end = min(day + timedelta(days=4), end)
+                    chunk_days = (chunk_end - day).days + 1
+                    source_index = 0 if day >= today - timedelta(days=60) else 1
+                    for family in source_families:
+                        source = family[source_index]
+                        with connect() as db:
+                            cached = db.execute(
+                                "SELECT COUNT(*) FROM ingestions WHERE source=? AND bbox=? AND day BETWEEN ? AND ?",
+                                (source, area, day.isoformat(), chunk_end.isoformat()),
+                            ).fetchone()[0]
+                        if cached < chunk_days:
+                            await ingest(map_key, bbox, chunk_days, [source], day)
+                    day = chunk_end + timedelta(days=1)
+            except httpx.HTTPStatusError as exc:
+                message = re.sub(r"\s+", " ", exc.response.text).strip().replace(map_key, "[redacted]")[:180]
+                raise HTTPException(502, f"NASA FIRMS history request failed: HTTP {exc.response.status_code}. {message}") from exc
+            except ValueError as exc:
+                raise HTTPException(502, str(exc)) from exc
+            except Exception as exc:
+                raise HTTPException(502, f"FIRMS history request failed: {type(exc).__name__}") from exc
+    data = summarize(bbox, start, end)
+    data.update({"bbox": bbox, "start": start, "end": end, "risk": statistical_risk(data["series"]), "forecast": None})
     return data
 
 
