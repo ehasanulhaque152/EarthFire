@@ -65,7 +65,7 @@ The browser talks to the FastAPI server through Vite's `/api` proxy in developme
 | `world-atlas` + `topojson-client` | Country outlines | Supplies geographic boundaries for the globe; this is visual context, not fire training data. |
 | SVG | Trend chart and sparklines | Lightweight charts drawn from API series without another chart package. |
 | TensorFlow/Keras + NumPy | Optional LSTM | Trains a small sequence model for next-day occupied-cell counts. |
-| Pillow + ImageIO/FFmpeg | Walkthrough video | Renders a captioned, illustrated UI demonstration to MP4. |
+| Pillow + `imageio-ffmpeg` | Walkthrough video | Builds the preview poster and encodes the silent, captioned MP4 guide and preview. |
 
 The frontend's Lucide icons provide navigation and metric symbols. CSS in `frontend/src/style.css` controls the responsive dark layout. Prettier formats the frontend source; TypeScript checks frontend types.
 
@@ -223,8 +223,14 @@ For a more defensible future model, compare against a persistence or seasonal ba
 | `backend/train_lstm.py` | Optional TensorFlow/Keras training, chronological holdout, next-day prediction and JSON artifact. |
 | `data/earthfire.sqlite3` | Committed snapshot of NASA FIRMS observations for local exploration. |
 | `data/README.md` | Explains the committed SQLite snapshot. |
-| `docs/earthfire-walkthrough.mp4` | Shareable illustrated website walkthrough. |
-| `docs/earthfire-walkthrough-poster.png` | Preview thumbnail linked to the video in README. |
+| `docs/earthfire-walkthrough.mp4` | Original 36-second illustrated walkthrough used as source footage. |
+| `docs/earthfire-user-guide-60s.mp4` | Silent, one-minute guide to the region, date, calendar, globe, sensor layers, trends and shared grid. |
+| `docs/earthfire-preview-30s.mp4` | First 30 seconds of the guide for a quick README preview. |
+| `docs/earthfire-user-guide.vtt` | Optional WebVTT caption transcript for the full guide. |
+| `docs/earthfire-preview-30s.vtt` | WebVTT caption transcript for the preview. |
+| `docs/earthfire-preview-poster.png` | Clickable poster image for the 30-second README preview. |
+| `docs/earthfire-user-guide-end-card.png` | Branded end card used by the guide video. |
+| `tools/create_user_guide_video.py` | Rebuilds the full guide, preview, caption files and poster from the source walkthrough. |
 | `docs/EarthFire-website-overview.pptx` | Six-slide editable presentation explaining the website with stills from the walkthrough. |
 | `docs/PROJECT_DOCUMENTATION.md` | This detailed technical and user guide. |
 
