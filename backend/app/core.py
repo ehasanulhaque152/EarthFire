@@ -113,9 +113,13 @@ def summarize(bbox: tuple[float, float, float, float], start: date, end: date):
           (start.isoformat(), end.isoformat(), west, east, south, north)).fetchall()
         latest = db.execute("SELECT MAX(fetched_at) AS updated FROM ingestions").fetchone()["updated"]
         area = ",".join(f"{v:g}" for v in bbox)
-        covered = {row["day"]: row["sources"] for row in db.execute("SELECT day, COUNT(DISTINCT source) AS sources FROM ingestions WHERE bbox = ? AND day BETWEEN ? AND ? GROUP BY day", (area, start.isoformat(), end.isoformat()))}
+        covered = defaultdict(set)
+        for row in db.execute("SELECT day, source FROM ingestions WHERE bbox = ? AND day BETWEEN ? AND ?", (area, start.isoformat(), end.isoformat())):
+            sensor = SOURCES.get(row["source"])
+            if sensor:
+                covered[row["day"]].add(sensor)
     grouped = defaultdict(lambda: {"MODIS": {"count": 0, "frp": 0.0}, "VIIRS": {"count": 0, "frp": 0.0}, "sources": set()})
-    daily = defaultdict(lambda: {"MODIS": 0, "VIIRS": 0, "MODIS_frp": 0.0, "VIIRS_frp": 0.0, "cells": set()})
+    daily = defaultdict(lambda: {"MODIS": 0, "VIIRS": 0, "MODIS_frp": 0.0, "VIIRS_frp": 0.0, "harmonized_frp": 0.0, "cells": set()})
     for row in raw:
         key = (row["day"], *cell_key(row["lat"], row["lon"]))
         group = grouped[key]
@@ -131,6 +135,7 @@ def summarize(bbox: tuple[float, float, float, float], start: date, end: date):
         lat, lon = (y + .5) * GRID_DEG, (x + .5) * GRID_DEG
         area = cell_area_km2(lat)
         m, v = val["MODIS"], val["VIIRS"]
+        daily[day]["harmonized_frp"] += max(m["frp"], v["frp"])
         # Presence is a common spatial unit. It is not a calibrated fire count.
         cells.append({"day": day, "lat": lat, "lon": lon, "area_km2": round(area, 2),
           "modis_count": m["count"], "viirs_count": v["count"],
@@ -144,7 +149,8 @@ def summarize(bbox: tuple[float, float, float, float], start: date, end: date):
         d = daily[current.isoformat()]
         series.append({"day": current.isoformat(), "modis_count": d["MODIS"],
           "viirs_count": d["VIIRS"], "modis_frp": round(d["MODIS_frp"], 2),
-          "viirs_frp": round(d["VIIRS_frp"], 2), "occupied_cells": len(d["cells"]), "covered_sources": covered.get(current.isoformat(), 0)})
+          "viirs_frp": round(d["VIIRS_frp"], 2), "harmonized_frp": round(d["harmonized_frp"], 2),
+          "occupied_cells": len(d["cells"]), "covered_sources": len(covered.get(current.isoformat(), set()))})
         current += timedelta(days=1)
     return {"cells": cells, "series": series, "total_detections": len(raw), "updated_at": latest,
       "method": {"grid_degrees": GRID_DEG, "harmonized_count": "one occupied cell per UTC day",
