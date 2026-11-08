@@ -38,6 +38,7 @@ type Day = {
   viirs_count: number
   modis_frp: number
   viirs_frp: number
+  harmonized_frp: number
   occupied_cells: number
   covered_sources: number
 }
@@ -98,7 +99,7 @@ function TrendChart({ series, metric }: { series: Day[]; metric: 'count' | 'frp'
   const a = series.map((d) => (metric === 'count' ? d.modis_count : d.modis_frp)),
     b = series.map((d) => (metric === 'count' ? d.viirs_count : d.viirs_frp)),
     c = series.map((d) =>
-      metric === 'count' ? d.occupied_cells : Math.max(d.modis_frp, d.viirs_frp),
+      metric === 'count' ? d.occupied_cells : d.harmonized_frp,
     )
   const max = Math.max(1, ...a, ...b, ...c),
     n = Math.max(1, series.length - 1)
@@ -343,6 +344,22 @@ export default function App() {
     [cells, layer],
   )
   const daily = calendarSeries.find((d) => d.day === selectedDay)
+  const calendarCoverage = calendarSeries.filter((d) => d.covered_sources >= 2)
+  const coverageStart = calendarCoverage[0]?.day
+  const coverageEnd = calendarCoverage.at(-1)?.day
+  const observedTrend = (data?.series || []).filter((d) => d.covered_sources >= 2)
+  const peakDay = observedTrend.reduce<Day | null>((peak, current) =>
+    !peak || current.occupied_cells > peak.occupied_cells ? current : peak, null)
+  const sortedCells = [...observedTrend.map((d) => d.occupied_cells)].sort((a, b) => a - b)
+  const middle = Math.floor(sortedCells.length / 2)
+  const typicalCells = sortedCells.length
+    ? sortedCells.length % 2
+      ? sortedCells[middle]
+      : (sortedCells[middle - 1] + sortedCells[middle]) / 2
+    : 0
+  const peakAboveTypical = typicalCells > 0 && peakDay
+    ? Math.round(((peakDay.occupied_cells - typicalCells) / typicalCells) * 100)
+    : null
   const total = data?.series.reduce((s, d) => s + d.modis_count + d.viirs_count, 0) || 0
   const activeDays = data?.series.filter((d) => d.occupied_cells > 0).length || 0
   const coveredDays = data?.series.filter((d) => d.covered_sources >= 2).length || 0
@@ -420,7 +437,7 @@ export default function App() {
               <h1>
                 Fire intelligence, <em>from orbit.</em>
               </h1>
-              <p>Explore where MODIS and VIIRS agree, and how fire activity evolves over time.</p>
+              <p>Compare MODIS and VIIRS fire detections on a shared daily grid and explore how activity changes over time.</p>
             </div>
             <button
               className="sync-button"
@@ -703,7 +720,13 @@ export default function App() {
                 <b>{nf.format(daily?.occupied_cells || 0)}</b>
               </div>
               <div className="snapshot-cta">
-                {calendarSeries.filter((d) => d.occupied_cells > 0).length} days with detections this month <ArrowRight size={15} />
+                {calendarSeries.filter((d) => d.day.startsWith(`${calendarMonth}-`) && d.occupied_cells > 0).length} days with detections this month <ArrowRight size={15} />
+              </div>
+              <p className="calendar-explainer">An active day has at least one occupied grid cell in {region}. Each day is counted once (UTC), regardless of the number of detections.</p>
+              <div className="coverage-note">
+                <strong>Dual-sensor coverage</strong>
+                <span>{coverageStart && coverageEnd ? `${coverageStart} to ${coverageEnd}` : 'No complete MODIS + VIIRS days loaded for this month'}</span>
+                <small>NASA FIRMS observations for this region; dates may have gaps.</small>
               </div>
             </section>
           </div>
@@ -741,17 +764,32 @@ export default function App() {
                 </span>
                 <span>
                   <i className="legend-line harmonized" />
-                  Harmonized{metric === 'frp' ? ' proxy' : ''}
+                  {metric === 'frp' ? 'Harmonized FRP proxy' : 'Occupied cells'}
                 </span>
+              </div>
+              <p className="chart-note">
+                {metric === 'count'
+                  ? 'MODIS and VIIRS lines count FIRMS detections; the harmonized line counts occupied 0.5° grid cells.'
+                  : 'The harmonized FRP line sums the larger sensor FRP value in each occupied cell; it is an exploratory proxy.'}
+              </p>
+              <div className="trend-insight" aria-live="polite">
+                <strong>What this period shows</strong>
+                {peakDay && observedTrend.length >= 3 ? (
+                  <span>
+                    {peakDay.occupied_cells > 0 ? <>Peak observed activity was {new Date(`${peakDay.day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}: {nf.format(peakDay.occupied_cells)} occupied cells
+                    {peakAboveTypical !== null ? ` (${peakAboveTypical}% above the median of ${nf.format(typicalCells)} cells)` : `; the median was ${nf.format(typicalCells)} cells`} across {observedTrend.length} dual-sensor days in the displayed 30-day window.
+                    </> : `No occupied grid cells were recorded across ${observedTrend.length} days with both sensors reporting in the displayed 30-day window.`}
+                  </span>
+                ) : (
+                  <span>Load at least three days with both MODIS and VIIRS coverage to compare the observed peak with the period median.</span>
+                )}
               </div>
             </section>
             <section className="panel method-panel" id="method">
               <div className="panel-kicker">THE METHOD</div>
               <h2>One grid. Two sensors.</h2>
               <p>
-                MODIS and VIIRS detect fires at different resolutions. EarthFire places both on the
-                same 0.5° daily grid, so you can compare sensor activity without treating each
-                hotspot as an equal area.
+                Each FIRMS detection is assigned to a 0.5° latitude/longitude cell using its coordinates and acquisition date in UTC. For each cell-day, EarthFire keeps MODIS and VIIRS counts separately, then counts the cell once in the harmonized activity total. This puts different sensor resolutions on a shared comparison grid; it does not claim detections are the same fire.
               </p>
               <div className="method-flow">
                 <span>
@@ -765,8 +803,13 @@ export default function App() {
                 <span className="flow-result">DAILY GRID</span>
               </div>
               <div className="method-note">
-                <CircleHelp size={16} /> Occupied cells are an activity indicator, not a calibrated
-                fire count or fire probability.
+                <CircleHelp size={16} /> An occupied cell means one or more detections occurred in that grid cell on that UTC day. It is an activity indicator, not a fire count, fire perimeter, or fire probability.
+              </div>
+              <div className="source-coverage">
+                <strong>Data &amp; coverage</strong>
+                <span>NASA FIRMS active-fire detections · MODIS (Terra/Aqua) and VIIRS (Suomi-NPP, NOAA-20, NOAA-21)</span>
+                <span>{coverageStart && coverageEnd ? `${coverageStart} — ${coverageEnd} · ${calendarCoverage.length} days with both sensor families available` : 'Coverage dates appear after the selected period loads'}</span>
+                <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noreferrer">NASA FIRMS data source</a>
               </div>
             </section>
           </div>
