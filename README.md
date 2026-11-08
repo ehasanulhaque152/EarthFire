@@ -14,16 +14,22 @@ backend/train_lstm.py  Optional TensorFlow/Keras forecast training
 frontend/src/App.tsx    Dashboard controls, metrics, calendar and charts
 frontend/src/Globe.tsx  Interactive 3D globe
 frontend/src/style.css  Responsive dashboard styles
-docs/earthfire-walkthrough.mp4  36-second captioned walkthrough
+docs/earthfire-user-guide-60s.mp4  Silent, captioned one-minute user guide
+docs/earthfire-preview-30s.mp4  30-second README preview clip
+tools/create_user_guide_video.py  Rebuilds the guide, preview, captions, and poster
 ```
 
 The local `.env`, installed dependencies and build output are excluded from Git. A snapshot of NASA FIRMS observations is committed at [`data/earthfire.sqlite3`](data/earthfire.sqlite3). The public repository includes `.env.example` instead of a live key.
 
-## Preview and walkthrough
+## Watch the 30-second preview
 
-Run the API and dashboard as described below, then open [the local preview](http://127.0.0.1:5173/). The [36-second walkthrough video](docs/earthfire-walkthrough.mp4) illustrates the region and date controls, sensor layers, trends, and harmonization method using a synced Bangladesh snapshot.
+Click the preview image to open the silent video, then open the [full one-minute walkthrough](docs/earthfire-user-guide-60s.mp4). It shows how to choose a region and date, read the calendar, compare sensor layers on the globe, and explore the activity trend and shared grid. The video has no voiceover; on-screen captions explain each step. A separate [WebVTT caption transcript](docs/earthfire-user-guide.vtt) is available.
 
-[![EarthFire walkthrough poster](docs/earthfire-walkthrough-poster.png)](docs/earthfire-walkthrough.mp4)
+[![Play the 30-second EarthFire walkthrough preview](docs/earthfire-preview-poster.png)](docs/earthfire-preview-30s.mp4)
+
+For the local experience, run the API and dashboard as described below, then open [the local preview](http://127.0.0.1:5173/).
+
+To regenerate the videos, install Pillow and `imageio-ffmpeg`, then run `python tools/create_user_guide_video.py` from the repository root.
 
 ## Public demo deployment
 
