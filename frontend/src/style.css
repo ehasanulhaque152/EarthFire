@@ -1202,3 +1202,14 @@ footer { color: #6e7681; letter-spacing: 0.4px; }
 }
 .calendar-period select:focus { outline: 2px solid #1f6feb; outline-offset: 1px; }
 .calendar-period select option { background: #161b22; }
+
+
+/* Keep the calendar snapshot card from overlapping the following section. */
+.primary-grid {
+  align-items: start;
+}
+.side-panel {
+  height: auto;
+  min-height: 455px;
+  padding-bottom: 16px;
+}
