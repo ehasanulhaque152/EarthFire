@@ -124,7 +124,13 @@ export default function Globe({
         geometry: { type: string; coordinates: unknown }
       }[]
     }
-    const countryLabels: { sprite: THREE.Sprite; point: THREE.Vector3; priority: number }[] = []
+    const labelLayer = document.createElement('div')
+    labelLayer.style.position = 'absolute'
+    labelLayer.style.inset = '0'
+    labelLayer.style.zIndex = '3'
+    labelLayer.style.pointerEvents = 'none'
+    el.appendChild(labelLayer)
+    const countryLabels: { element: HTMLSpanElement; point: THREE.Vector3; priority: number }[] = []
     for (const country of countries.features) {
       const geometry = country.geometry
       const polygons =
@@ -150,37 +156,22 @@ export default function Globe({
           if (center && (!anchor || center.area > anchor.area)) anchor = center
         }
         if (anchor) {
-          const canvas = document.createElement('canvas')
-          canvas.width = 512
-          canvas.height = 72
-          const context = canvas.getContext('2d')!
-          context.font = '600 32px Arial, sans-serif'
-          context.textAlign = 'center'
-          context.textBaseline = 'middle'
-          const textWidth = Math.min(480, context.measureText(name).width)
-          const pillWidth = textWidth + 28
-          const left = (canvas.width - pillWidth) / 2
-          context.beginPath()
-          context.roundRect(left, 10, pillWidth, 52, 13)
-          context.fillStyle = 'rgba(5, 15, 24, 0.82)'
-          context.fill()
-          context.strokeStyle = 'rgba(152, 205, 219, 0.6)'
-          context.lineWidth = 2
-          context.stroke()
-          context.fillStyle = '#f3f8fa'
-          context.shadowColor = '#071018'
-          context.shadowBlur = 3
-          context.fillText(name, canvas.width / 2, 36, 460)
-          const texture = new THREE.CanvasTexture(canvas)
-          texture.colorSpace = THREE.SRGBColorSpace
-          const sprite = new THREE.Sprite(
-            new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false }),
-          )
-          sprite.position.copy(xyz(anchor.lat, anchor.lon, 2.035))
-          sprite.scale.set(Math.max(0.3, (pillWidth / canvas.width) * 0.9), 0.28, 1)
-          sprite.renderOrder = 2
-          globe.add(sprite)
-          countryLabels.push({ sprite, point: sprite.position.clone(), priority: anchor.area })
+          const element = document.createElement('span')
+          element.className = 'country-name-label'
+          element.textContent = name
+          element.style.position = 'absolute'
+          element.style.display = 'none'
+          element.style.padding = '3px 7px'
+          element.style.border = '1px solid rgba(152, 205, 219, 0.72)'
+          element.style.borderRadius = '5px'
+          element.style.background = 'rgba(5, 15, 24, 0.9)'
+          element.style.color = '#f3f8fa'
+          element.style.font = '700 11px/1.2 Arial, sans-serif'
+          element.style.whiteSpace = 'nowrap'
+          element.style.textShadow = '0 1px 3px #000'
+          element.style.transform = 'translate(-50%, -50%)'
+          labelLayer.appendChild(element)
+          countryLabels.push({ element, point: xyz(anchor.lat, anchor.lon, 2.035), priority: anchor.area })
         }
       }
     }
@@ -368,7 +359,8 @@ export default function Globe({
     function animate() {
       if (disposed) return
       globe.updateMatrixWorld(true)
-      const visibleLabels: { sprite: THREE.Sprite; facing: number; priority: number }[] = []
+      camera.updateMatrixWorld(true)
+      const visibleLabels: { element: HTMLSpanElement; point: THREE.Vector3; priority: number; facing: number }[] = []
       for (const label of countryLabels) {
         const worldPoint = label.point.clone().applyMatrix4(globe.matrixWorld)
         const facing = worldPoint.z / worldPoint.length()
@@ -376,8 +368,19 @@ export default function Globe({
       }
       visibleLabels.sort((a, b) => b.facing - a.facing || b.priority - a.priority)
       const labelLimit = camera.position.z < 4.2 ? 26 : camera.position.z < 5.4 ? 18 : 12
-      const shown = new Set(visibleLabels.slice(0, labelLimit).map((label) => label.sprite))
-      for (const label of countryLabels) label.sprite.visible = shown.has(label.sprite)
+      const shown = new Set(visibleLabels.slice(0, labelLimit).map((label) => label.element))
+      const width = el.clientWidth
+      const height = el.clientHeight
+      for (const label of countryLabels) {
+        if (!shown.has(label.element)) {
+          label.element.style.display = 'none'
+          continue
+        }
+        const position = label.point.clone().applyMatrix4(globe.matrixWorld).project(camera)
+        label.element.style.display = 'block'
+        label.element.style.left = `${((position.x + 1) / 2) * width}px`
+        label.element.style.top = `${((1 - position.y) / 2) * height}px`
+      }
       renderer.render(scene, camera)
       raf = requestAnimationFrame(animate)
     }
@@ -395,10 +398,7 @@ export default function Globe({
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
       el.removeEventListener('wheel', zoom)
-      for (const { sprite } of countryLabels) {
-        sprite.material.map?.dispose()
-        sprite.material.dispose()
-      }
+      el.removeChild(labelLayer)
       renderer.dispose()
       earthTexture.dispose()
       el.removeChild(renderer.domElement)
