@@ -1,6 +1,6 @@
 # EarthFire: project documentation
 
-This guide describes the code in this repository as of 6 November 2026. EarthFire is an exploratory NASA FIRMS active-fire dashboard, with a public demo at [earthfire.onrender.com](https://earthfire.onrender.com/). It compares MODIS and VIIRS observations on a common daily grid, stores retrieved observations locally, displays them on a 3D globe, and can train an optional TensorFlow forecast after enough history has been collected. The design follows the architecture supplied for the project; it does not claim scientific sensor calibration or operational fire-risk prediction.
+This guide describes the code in this repository as of 9 November 2026. EarthFire is an exploratory NASA FIRMS active-fire dashboard, with a public demo at [earthfire.onrender.com](https://earthfire.onrender.com/). It compares MODIS and VIIRS observations on a common daily grid, stores retrieved observations locally, displays them on a 3D globe, and can train an optional TensorFlow forecast after enough history has been collected. The design follows the architecture supplied for the project; it does not claim scientific sensor calibration or operational fire-risk prediction.
 
 ## Public demo and deployment
 
@@ -165,9 +165,18 @@ Bounding boxes are `[west, south, east, north]` and validated against world coor
 
 ## 6. Frontend implementation
 
-`frontend/src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. Sync calls `/api/ingest/recent`, which fills gaps for the preceding 14 days and refreshes the latest three days. The calendar's month/year selectors call `/api/history/month`; results update the calendar, selected-day snapshot and globe points. Older data uses available SP archive products, while the recent window uses NRT products. The frontend does not embed the FIRMS key.
+`frontend/src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric, timeline playback, followed regions, notification permission and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. Sync calls `/api/ingest/recent`, which fills gaps for the preceding 14 days and refreshes the latest three days. The calendar's month/year selectors call `/api/history/month`; results update the calendar, selected-day snapshot and globe points. Older data uses available SP archive products, while the recent window uses NRT products. The frontend does not embed the FIRMS key.
 
 The metric cards show totals for the loaded 30-day window, while the calendar and globe show the selected day. The layer buttons filter that day's cells to MODIS, VIIRS, or all occupied cells. The trends chart uses SVG polylines for sensor counts or FRP. Its displayed “harmonized FRP proxy” uses the larger **daily** sensor FRP total, whereas `core.py` returns the larger sensor sum **per cell** in each cell record. Both are exploratory display proxies and should not be treated as calibrated energy totals. `frontend/src/style.css` defines layout, responsive rules, colors and control states.
+
+### Interactive dashboard features
+
+- **Daily timeline playback:** the slider and play/pause control step through dates available in the currently loaded region or selected month. Advancing the date updates the globe markers and the daily snapshot; playback does not fetch every month automatically.
+- **Hotspot detail card:** selecting a marker shows its grid-cell center, UTC observation date, containing country, MODIS and VIIRS counts and sensor FRP, approximate occupied cell area, density, and a combined FRP display. The combined figure is the sum shown for that cell; it is not a deduplicated fire-level measurement. FIRMS confidence is not currently displayed by this card.
+- **Followed regions and notifications:** followed entries are named region presets stored in the browser's `localStorage`, not server-side user accounts or arbitrary coordinates. After a sync for the active region, an alert is eligible when the loaded 30-day detection total increases. Browser notifications require permission, and the application limits them to one per region per day. There is no server push; sync-driven alerts only happen while the dashboard is open and running.
+- **CSV and SVG export:** CSV downloads the cell/day rows in the loaded overview or selected calendar month, including coordinates, sensor counts and FRP, cell area, density, and harmonized values. It is aggregated grid data, not raw FIRMS rows. The chart button downloads the currently displayed trend plot as SVG.
+
+
 
 `frontend/src/Globe.tsx` creates a Three.js sphere, atmosphere, latitude/longitude grid, country outlines and point markers. It converts geographic coordinates to 3D Cartesian coordinates, focuses the globe on the chosen region, lets the user drag to rotate, and resizes the WebGL canvas with `ResizeObserver`. Marker color identifies the selected layer; marker size grows logarithmically with the value. For browser performance it displays at most 1,000 points and disposes geometries/materials when markers change or the component unmounts.
 
