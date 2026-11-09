@@ -72,6 +72,25 @@ export function countryCenter(name: string): [number, number] | null {
   }
   return anchor ? [anchor.lat, anchor.lon] : null
 }
+export function countryBounds(name: string): [number, number, number, number] | null {
+  const country = countryCollection.features.find((item) => item.properties?.name === name)
+  if (!country) return null
+  const geometry = country.geometry
+  const polygons = geometry.type === 'Polygon'
+    ? [geometry.coordinates]
+    : geometry.type === 'MultiPolygon'
+      ? geometry.coordinates
+      : []
+  const coordinates = (polygons as number[][][][]).flat(2)
+  if (!coordinates.length) return null
+  const longitudes = coordinates.map(([lon]) => lon)
+  const latitudes = coordinates.map(([, lat]) => lat)
+  const west = Math.max(-180, Math.min(...longitudes))
+  const east = Math.min(180, Math.max(...longitudes))
+  const south = Math.max(-90, Math.min(...latitudes))
+  const north = Math.min(90, Math.max(...latitudes))
+  return west < east && south < north ? [west, south, east, north] : null
+}
 
 export default function Globe({
   points,
@@ -248,7 +267,7 @@ export default function Globe({
             : p.kind === 'VIIRS'
               ? 0x48d9de
               : 0xff6c50
-        const size = Math.min(0.09, 0.045 + Math.log1p(p.value) * 0.01) * (isSelected ? 1.5 : 1)
+        const size = Math.min(0.05, 0.022 + Math.log1p(p.value) * 0.005) * (isSelected ? 1.5 : 1)
         const mesh = new THREE.Mesh(
           new THREE.SphereGeometry(size, 8, 8),
           new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }),

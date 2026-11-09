@@ -18,7 +18,7 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react'
-import Globe, { countryCenter, countryNames, type Point } from './Globe'
+import Globe, { countryBounds, countryCenter, countryNames, type Point } from './Globe'
 
 type Cell = {
   day: string
@@ -177,6 +177,9 @@ export default function App() {
   const [selectedFire, setSelectedFire] = useState<Point | null>(null)
   const [countryQuery, setCountryQuery] = useState('')
   const [searchedCountry, setSearchedCountry] = useState<[number, number] | null>(null)
+  const [searchedCountryName, setSearchedCountryName] = useState('')
+  const [searchedCountryData, setSearchedCountryData] = useState<Overview | null>(null)
+  const [countryLoading, setCountryLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
@@ -186,11 +189,14 @@ export default function App() {
   const [calendarData, setCalendarData] = useState<Overview | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
   const historyRequest = useRef(0)
+  const countryRequest = useRef(0)
   const syncInFlight = useRef(false)
   const bbox = regions[region]
   useEffect(() => {
     setCountryQuery('')
     setSearchedCountry(null)
+    setSearchedCountryName('')
+    setSearchedCountryData(null)
   }, [region])
   function focusCountry(query: string) {
     const normalized = query.trim().toLocaleLowerCase()
@@ -203,8 +209,55 @@ export default function App() {
     if (center) {
       setCountryQuery(country)
       setSearchedCountry(center)
+      setSearchedCountryName(country)
     }
   }
+  useEffect(() => {
+    if (!searchedCountryName) {
+      setSearchedCountryData(null)
+      return
+    }
+    const bounds = countryBounds(searchedCountryName)
+    if (!bounds) return
+    const requestId = ++countryRequest.current
+    const controller = new AbortController()
+    const loadCountry = async () => {
+      setCountryLoading(true)
+      setSearchedCountryData(null)
+      try {
+        const health = await fetch('/api/health', { signal: controller.signal }).then((response) => response.json())
+        if (health.firms_configured) {
+          await fetch('/api/ingest/recent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bbox: bounds }),
+            signal: controller.signal,
+          })
+        }
+        const end = health.firms_configured ? today() : (health.latest_observation_day || today())
+        const start = dayString(new Date(Date.parse(`${end}T00:00:00Z`) - 29 * 86400000))
+        const params = new URLSearchParams({
+          west: String(bounds[0]), south: String(bounds[1]),
+          east: String(bounds[2]), north: String(bounds[3]), start, end,
+        })
+        const response = await fetch(`/api/overview?${params}`, { signal: controller.signal })
+        if (!response.ok) throw Error('Could not load hotspots for this country')
+        const overview: Overview = await response.json()
+        if (requestId !== countryRequest.current) return
+        setSearchedCountryData(overview)
+        const latestHotspotDay = [...overview.series].reverse().find((day) => day.occupied_cells > 0)?.day
+        if (latestHotspotDay) setSelectedDay(latestHotspotDay)
+      } catch (cause) {
+        if (!controller.signal.aborted && requestId === countryRequest.current) {
+          setError((cause as Error).message || 'Could not load country hotspots')
+        }
+      } finally {
+        if (requestId === countryRequest.current) setCountryLoading(false)
+      }
+    }
+    void loadCountry()
+    return () => controller.abort()
+  }, [searchedCountryName])
   async function load() {
     setLoading(true)
     try {
@@ -339,7 +392,8 @@ export default function App() {
     }
   }
   const calendarSeries = calendarData?.series || data?.series || []
-  const cells = (calendarData || data)?.cells.filter((c) => c.day === selectedDay) || []
+  const activeOverview = searchedCountryName ? searchedCountryData : (calendarData || data)
+  const cells = activeOverview?.cells.filter((c) => c.day === selectedDay) || []
   const points: Point[] = useMemo(
     () =>
       cells
@@ -640,8 +694,13 @@ export default function App() {
                     const match = countryNames.find(
                       (name) => name.toLocaleLowerCase() === value.trim().toLocaleLowerCase(),
                     )
-                    if (match) setSearchedCountry(countryCenter(match))
-                    else if (!value.trim()) setSearchedCountry(null)
+                    if (match) {
+                      setSearchedCountry(countryCenter(match))
+                      setSearchedCountryName(match)
+                    } else if (!value.trim()) {
+                      setSearchedCountry(null)
+                      setSearchedCountryName('')
+                    }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
@@ -654,6 +713,13 @@ export default function App() {
                   {countryNames.map((name) => <option key={name} value={name} />)}
                 </datalist>
               </div>
+              {searchedCountryName && (
+                <div className="country-hotspot-status" role="status">
+                  {countryLoading
+                    ? `Loading recent hotspots for ${searchedCountryName}…`
+                    : `${points.length.toLocaleString()} hotspot cells shown for ${searchedCountryName} on ${selectedDay} UTC`}
+                </div>
+              )}
               <div className="layer-row">
                 <div className="layer-switch">
                   {(['HARMONIZED', 'MODIS', 'VIIRS'] as Layer[]).map((l) => (
