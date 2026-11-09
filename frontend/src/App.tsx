@@ -647,6 +647,7 @@ export default function App() {
                   key={region}
                   points={points}
                   focus={searchedCountry || [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]}
+                  zoom={searchedCountry ? 5.1 : 6.5}
                   selectedPoint={selectedFire}
                   onPointSelect={setSelectedFire}
                 />

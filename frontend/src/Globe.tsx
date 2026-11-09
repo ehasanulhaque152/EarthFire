@@ -95,16 +95,19 @@ export function countryBounds(name: string): [number, number, number, number] | 
 export default function Globe({
   points,
   focus,
+  zoom,
   selectedPoint,
   onPointSelect,
 }: {
   points: Point[]
   focus: [number, number]
+  zoom: number
   selectedPoint: Point | null
   onPointSelect: (point: Point) => void
 }) {
   const holder = useRef<HTMLDivElement>(null)
   const globeRef = useRef<THREE.Group | null>(null)
+  const zoomTargetRef = useRef(6.5)
   const pointsRef = useRef(points)
   const selectedPointRef = useRef(selectedPoint)
   const onPointSelectRef = useRef(onPointSelect)
@@ -333,10 +336,11 @@ export default function Globe({
           const [a, b] = [...activePointers.values()]
           const distance = Math.hypot(a.x - b.x, a.y - b.y)
           if (pinchDistance > 0) {
-            camera.position.z = Math.max(
+            zoomTargetRef.current = Math.max(
               3.1,
               Math.min(10, camera.position.z - (distance - pinchDistance) * 0.012),
             )
+            camera.position.z = zoomTargetRef.current
           }
           pinchDistance = distance
           dragging = false
@@ -398,11 +402,13 @@ export default function Globe({
     el.addEventListener('pointercancel', up)
     const zoom = (e: WheelEvent) => {
       e.preventDefault()
-      camera.position.z = Math.max(3.1, Math.min(10, camera.position.z + e.deltaY * 0.004))
+      zoomTargetRef.current = Math.max(3.1, Math.min(10, camera.position.z + e.deltaY * 0.004))
+      camera.position.z = zoomTargetRef.current
     }
     el.addEventListener('wheel', zoom, { passive: false })
     function animate() {
       if (disposed) return
+      camera.position.z += (zoomTargetRef.current - camera.position.z) * 0.12
       globe.updateMatrixWorld(true)
       camera.updateMatrixWorld(true)
       const visibleLabels: { element: HTMLSpanElement; point: THREE.Vector3; priority: number; facing: number }[] = []
@@ -472,6 +478,9 @@ export default function Globe({
     globeRef.current.rotation.y = -Math.PI / 2 - (focus[1] * Math.PI) / 180
     globeRef.current.rotation.x = (focus[0] * Math.PI) / 180
   }, [focus[0], focus[1]])
+  useEffect(() => {
+    zoomTargetRef.current = zoom
+  }, [zoom])
   useEffect(() => {
     ;(holder.current as HTMLDivElement & { updateMarkers?: () => void })?.updateMarkers?.()
   }, [points, selectedPoint])
