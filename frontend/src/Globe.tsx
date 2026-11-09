@@ -24,6 +24,25 @@ function xyz(lat: number, lon: number, r = R) {
     r * Math.sin(phi) * Math.sin(theta),
   )
 }
+function ringCenter(ring: number[][]) {
+  if (ring.length < 3) return null
+  const referenceLon = ring[0][0]
+  const points = ring.map(([lon, lat]) => [referenceLon + ((((lon - referenceLon) + 540) % 360) - 180), lat])
+  let twiceArea = 0
+  let xSum = 0
+  let ySum = 0
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i]
+    const [x2, y2] = points[(i + 1) % points.length]
+    const cross = x1 * y2 - x2 * y1
+    twiceArea += cross
+    xSum += (x1 + x2) * cross
+    ySum += (y1 + y2) * cross
+  }
+  if (Math.abs(twiceArea) < 1e-8) return null
+  const lon = xSum / (3 * twiceArea)
+  return { lon: ((lon + 540) % 360) - 180, lat: ySum / (3 * twiceArea), area: Math.abs(twiceArea / 2) }
+}
 
 export default function Globe({
   points,
@@ -105,6 +124,7 @@ export default function Globe({
         geometry: { type: string; coordinates: unknown }
       }[]
     }
+    const countryLabels: { sprite: THREE.Sprite; point: THREE.Vector3; priority: number }[] = []
     for (const country of countries.features) {
       const geometry = country.geometry
       const polygons =
@@ -120,6 +140,47 @@ export default function Globe({
           globe.add(
             new THREE.Line(new THREE.BufferGeometry().setFromPoints(vertices), coastMaterial),
           )
+        }
+      }
+      const name = country.properties?.name
+      if (name && name !== 'Antarctica') {
+        let anchor: ReturnType<typeof ringCenter> = null
+        for (const polygon of polygons as number[][][][]) {
+          const center = polygon[0] && ringCenter(polygon[0])
+          if (center && (!anchor || center.area > anchor.area)) anchor = center
+        }
+        if (anchor) {
+          const canvas = document.createElement('canvas')
+          canvas.width = 512
+          canvas.height = 72
+          const context = canvas.getContext('2d')!
+          context.font = '600 32px Arial, sans-serif'
+          context.textAlign = 'center'
+          context.textBaseline = 'middle'
+          const textWidth = Math.min(480, context.measureText(name).width)
+          const pillWidth = textWidth + 28
+          const left = (canvas.width - pillWidth) / 2
+          context.beginPath()
+          context.roundRect(left, 10, pillWidth, 52, 13)
+          context.fillStyle = 'rgba(5, 15, 24, 0.82)'
+          context.fill()
+          context.strokeStyle = 'rgba(152, 205, 219, 0.6)'
+          context.lineWidth = 2
+          context.stroke()
+          context.fillStyle = '#f3f8fa'
+          context.shadowColor = '#071018'
+          context.shadowBlur = 3
+          context.fillText(name, canvas.width / 2, 36, 460)
+          const texture = new THREE.CanvasTexture(canvas)
+          texture.colorSpace = THREE.SRGBColorSpace
+          const sprite = new THREE.Sprite(
+            new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false }),
+          )
+          sprite.position.copy(xyz(anchor.lat, anchor.lon, 2.035))
+          sprite.scale.set(Math.max(0.3, (pillWidth / canvas.width) * 0.9), 0.28, 1)
+          sprite.renderOrder = 2
+          globe.add(sprite)
+          countryLabels.push({ sprite, point: sprite.position.clone(), priority: anchor.area })
         }
       }
     }
@@ -197,6 +258,8 @@ export default function Globe({
       lastX = 0,
       lastY = 0,
       raf = 0
+    const activePointers = new Map<number, { x: number; y: number }>()
+    let pinchDistance = 0
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
     const pointAtPointer = (e: PointerEvent) => {
@@ -210,6 +273,15 @@ export default function Globe({
       return hit?.object.userData.point as Point | undefined
     }
     const down = (e: PointerEvent) => {
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (activePointers.size === 2) {
+        const [a, b] = [...activePointers.values()]
+        pinchDistance = Math.hypot(a.x - b.x, a.y - b.y)
+        dragging = false
+        didMove = true
+        el.setPointerCapture(e.pointerId)
+        return
+      }
       dragging = true
       didMove = false
       startX = e.clientX
@@ -219,6 +291,23 @@ export default function Globe({
       el.setPointerCapture(e.pointerId)
     }
     const move = (e: PointerEvent) => {
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        if (activePointers.size >= 2) {
+          const [a, b] = [...activePointers.values()]
+          const distance = Math.hypot(a.x - b.x, a.y - b.y)
+          if (pinchDistance > 0) {
+            camera.position.z = Math.max(
+              3.1,
+              Math.min(10, camera.position.z - (distance - pinchDistance) * 0.012),
+            )
+          }
+          pinchDistance = distance
+          dragging = false
+          didMove = true
+          return
+        }
+      }
       if (!dragging) {
         el.style.cursor = pointAtPointer(e) ? 'pointer' : 'grab'
         return
@@ -234,6 +323,8 @@ export default function Globe({
       lastY = e.clientY
     }
     const up = (e: PointerEvent) => {
+      activePointers.delete(e.pointerId)
+      if (activePointers.size < 2) pinchDistance = 0
       if (dragging && !didMove) {
         const point = pointAtPointer(e)
         if (point) {
@@ -276,6 +367,17 @@ export default function Globe({
     el.addEventListener('wheel', zoom, { passive: false })
     function animate() {
       if (disposed) return
+      globe.updateMatrixWorld(true)
+      const visibleLabels: { sprite: THREE.Sprite; facing: number; priority: number }[] = []
+      for (const label of countryLabels) {
+        const worldPoint = label.point.clone().applyMatrix4(globe.matrixWorld)
+        const facing = worldPoint.z / worldPoint.length()
+        if (facing > 0.12) visibleLabels.push({ ...label, facing })
+      }
+      visibleLabels.sort((a, b) => b.facing - a.facing || b.priority - a.priority)
+      const labelLimit = camera.position.z < 4.2 ? 26 : camera.position.z < 5.4 ? 18 : 12
+      const shown = new Set(visibleLabels.slice(0, labelLimit).map((label) => label.sprite))
+      for (const label of countryLabels) label.sprite.visible = shown.has(label.sprite)
       renderer.render(scene, camera)
       raf = requestAnimationFrame(animate)
     }
@@ -293,6 +395,10 @@ export default function Globe({
       el.removeEventListener('pointerup', up)
       el.removeEventListener('pointercancel', up)
       el.removeEventListener('wheel', zoom)
+      for (const { sprite } of countryLabels) {
+        sprite.material.map?.dispose()
+        sprite.material.dispose()
+      }
       renderer.dispose()
       earthTexture.dispose()
       el.removeChild(renderer.domElement)
@@ -305,7 +411,7 @@ export default function Globe({
     <div
       className="globe-canvas"
       ref={holder}
-      aria-label="Interactive three dimensional globe. Click fire hotspots for country details, drag to rotate, and scroll to zoom."
+      aria-label="Interactive three dimensional globe with country names. Click fire hotspots for details, drag to rotate, scroll over the globe or pinch to zoom."
     />
   )
 }
