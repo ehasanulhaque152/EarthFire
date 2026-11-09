@@ -606,6 +606,12 @@ h2 {
 }
 .globe-search-row input::placeholder { color: #8b949e; }
 .globe-search-row:focus-within { box-shadow: inset 0 0 0 1px #1f6feb; }
+.country-hotspot-status {
+  padding: 0 20px 10px;
+  color: #8b949e;
+  background: #0d1117;
+  font-size: 11px;
+}
 .layer-row {
   height: 56px;
   border-top: 1px solid #20353e;
