@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
+  Bookmark,
+  Bell,
+  Download,
+  Pause,
+  Play,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
@@ -189,9 +194,17 @@ export default function App() {
   const [calendarMonth, setCalendarMonth] = useState(today().slice(0, 7))
   const [calendarData, setCalendarData] = useState<Overview | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [followedRegions, setFollowedRegions] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('earthfire-followed-regions') || '[]') as string[] } catch { return [] }
+  })
+  const followedRegionsRef = useRef(followedRegions)
+  followedRegionsRef.current = followedRegions
+  const [alertsEnabled, setAlertsEnabled] = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const historyRequest = useRef(0)
   const countryRequest = useRef(0)
   const syncInFlight = useRef(false)
+  const dataRef = useRef<Overview | null>(null)
   const bbox = regions[region]
   useEffect(() => {
     setCountryQuery('')
@@ -313,6 +326,7 @@ export default function App() {
         overview = await response.json()
         showingSavedSnapshot = true
       }
+      dataRef.current = overview
       setData(overview)
       setCalendarData(overview)
       setBackendReady(true)
@@ -364,7 +378,14 @@ export default function App() {
       })
       const body = await res.json()
       if (!res.ok) throw Error(body.detail || 'FIRMS sync failed')
+      const previousDetections = dataRef.current?.total_detections || 0
       await load()
+      const alertKey = `earthfire-alert-${region}-${today()}`
+      const currentDetections = dataRef.current?.total_detections || 0
+      if (currentDetections > previousDetections && followedRegionsRef.current.includes(region) && typeof Notification !== 'undefined' && Notification.permission === 'granted' && localStorage.getItem(alertKey) !== 'sent') {
+        new Notification(`New EarthFire hotspots · ${region}`, { body: `${currentDetections - previousDetections} detections were added to the current 30-day view.` })
+        localStorage.setItem(alertKey, 'sent')
+      }
       setSelectedFire(null)
       setSelectedDay(today())
     } catch (e) {
@@ -410,6 +431,43 @@ export default function App() {
     }
   }
   const calendarSeries = calendarData?.series || data?.series || []
+  const timelineDays = calendarSeries.map((d) => d.day).filter((d) => d <= today())
+  const selectedTimelineIndex = Math.max(0, timelineDays.indexOf(selectedDay))
+  useEffect(() => {
+    if (!playing || timelineDays.length < 2) return
+    const timer = window.setInterval(() => {
+      setSelectedFire(null)
+      setSelectedDay((current) => {
+        const index = timelineDays.indexOf(current)
+        return timelineDays[index < 0 ? 0 : (index + 1) % timelineDays.length]
+      })
+    }, 900)
+    return () => window.clearInterval(timer)
+  }, [playing, timelineDays.join('|')])
+  function toggleFollow() {
+    const next = followedRegions.includes(region) ? followedRegions.filter((item) => item !== region) : [...followedRegions, region]
+    setFollowedRegions(next)
+    localStorage.setItem('earthfire-followed-regions', JSON.stringify(next))
+  }
+  async function enableAlerts() {
+    if (typeof Notification === 'undefined') { setError('Browser notifications are not supported here.'); return }
+    const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission
+    setAlertsEnabled(permission === 'granted')
+    if (permission !== 'granted') setError('Allow notifications in your browser settings to receive hotspot alerts.')
+  }
+  function downloadCsv() {
+    const rows = (calendarData || data)?.cells || []
+    const columns: (keyof Cell)[] = ['day','lat','lon','area_km2','modis_count','viirs_count','modis_frp','viirs_frp','occupied','density','harmonized_frp']
+    const csv = [columns.join(','), ...rows.map((row) => columns.map((key) => String(row[key] ?? '')).join(','))].join('\\n')
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); link.download = `earthfire-${region.toLowerCase().replaceAll(' ', '-')}-${calendarMonth}.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+  }
+  function downloadChart() {
+    const svg = document.querySelector('.trends-panel .chart-wrap svg')
+    if (!svg) return
+    const copy = svg.cloneNode(true) as SVGSVGElement
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' })); link.download = `earthfire-${region.toLowerCase().replaceAll(' ', '-')}-chart.svg`; link.click(); window.setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+  }
   const activeOverview = searchedCountryName ? searchedCountryData : (calendarData || data)
   const cells = activeOverview?.cells.filter((c) => c.day === selectedDay) || []
   const points: Point[] = useMemo(
@@ -432,6 +490,8 @@ export default function App() {
           viirsCount: c.viirs_count,
           modisFrp: c.modis_frp,
           viirsFrp: c.viirs_frp,
+          areaKm2: c.area_km2,
+          density: c.density,
         })),
     [cells, layer],
   )
@@ -695,6 +755,9 @@ export default function App() {
                     <div className="fire-detail-row"><span>Coordinates</span><strong>{selectedFire.lat.toFixed(2)}°, {selectedFire.lon.toFixed(2)}°</strong></div>
                     <div className="fire-detail-row"><span>MODIS</span><strong>{nf.format(selectedFire.modisCount)} · {nf.format(Math.round(selectedFire.modisFrp))} MW</strong></div>
                     <div className="fire-detail-row"><span>VIIRS</span><strong>{nf.format(selectedFire.viirsCount)} · {nf.format(Math.round(selectedFire.viirsFrp))} MW</strong></div>
+                    <div className="fire-detail-row"><span>Cell area</span><strong>{nf.format(Math.round(selectedFire.areaKm2))} km²</strong></div>
+                    <div className="fire-detail-row"><span>Detection density</span><strong>{selectedFire.density.toFixed(2)} / km²</strong></div>
+                    <div className="fire-detail-row"><span>Combined FRP</span><strong>{nf.format(Math.round(selectedFire.modisFrp + selectedFire.viirsFrp))} MW</strong></div>
                     <p>Grid-cell center from satellite detections; not a fire perimeter.</p>
                   </section>
                 )}
@@ -758,6 +821,18 @@ export default function App() {
                 <div className="map-scale">
                   <span /> LOW <i /> HIGH
                 </div>
+              </div>
+              <div className="globe-tools">
+                <button type="button" onClick={() => setPlaying((value) => !value)} disabled={timelineDays.length < 2}>
+                  {playing ? <Pause size={14} /> : <Play size={14} />}{playing ? 'Pause' : 'Play'} timeline
+                </button>
+                <input aria-label="Fire timeline day" type="range" min="0" max={Math.max(0, timelineDays.length - 1)} value={selectedTimelineIndex} onChange={(e) => { setPlaying(false); setSelectedFire(null); setSelectedDay(timelineDays[Number(e.target.value)] || selectedDay) }} />
+                <small>{selectedDay} · {timelineDays.length} days</small>
+              </div>
+              <div className="saved-area-tools">
+                <button type="button" onClick={toggleFollow}><Bookmark size={14} />{followedRegions.includes(region) ? `Following ${region}` : `Follow ${region}`}</button>
+                <button type="button" onClick={enableAlerts} disabled={alertsEnabled}><Bell size={14} />{alertsEnabled ? 'Alerts enabled' : 'Enable hotspot alerts'}</button>
+                {followedRegions.length > 0 && <small>Saved areas: {followedRegions.join(', ')}</small>}
               </div>
             </section>
             <section className="panel side-panel">
@@ -871,6 +946,8 @@ export default function App() {
                   <h2>Activity over time</h2>
                 </div>
                 <div className="metric-toggle">
+                  <button className="export-button" onClick={downloadCsv} title="Download observation data as CSV"><Download size={13} /> CSV</button>
+                  <button className="export-button" onClick={downloadChart} title="Download chart as SVG"><Download size={13} /> Chart</button>
                   <button
                     className={metric === 'count' ? 'active' : ''}
                     onClick={() => setMetric('count')}
