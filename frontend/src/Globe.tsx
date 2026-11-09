@@ -12,6 +12,8 @@ export type Point = {
   viirsCount: number
   modisFrp: number
   viirsFrp: number
+  areaKm2: number
+  density: number
   country?: string
 }
 const R = 2
