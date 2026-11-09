@@ -180,6 +180,7 @@ export default function App() {
   const [searchedCountryName, setSearchedCountryName] = useState('')
   const [searchedCountryData, setSearchedCountryData] = useState<Overview | null>(null)
   const [countryLoading, setCountryLoading] = useState(false)
+  const [countryRefreshing, setCountryRefreshing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
@@ -223,36 +224,53 @@ export default function App() {
     const controller = new AbortController()
     const loadCountry = async () => {
       setCountryLoading(true)
+      setCountryRefreshing(false)
       setSearchedCountryData(null)
       try {
         const health = await fetch('/api/health', { signal: controller.signal }).then((response) => response.json())
-        if (health.firms_configured) {
-          await fetch('/api/ingest/recent', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bbox: bounds }),
-            signal: controller.signal,
-          })
-        }
         const end = health.firms_configured ? today() : (health.latest_observation_day || today())
         const start = dayString(new Date(Date.parse(`${end}T00:00:00Z`) - 29 * 86400000))
-        const params = new URLSearchParams({
-          west: String(bounds[0]), south: String(bounds[1]),
-          east: String(bounds[2]), north: String(bounds[3]), start, end,
-        })
-        const response = await fetch(`/api/overview?${params}`, { signal: controller.signal })
-        if (!response.ok) throw Error('Could not load hotspots for this country')
-        const overview: Overview = await response.json()
+        const loadOverview = async () => {
+          const params = new URLSearchParams({
+            west: String(bounds[0]), south: String(bounds[1]),
+            east: String(bounds[2]), north: String(bounds[3]), start, end,
+          })
+          const response = await fetch(`/api/overview?${params}`, { signal: controller.signal })
+          if (!response.ok) throw Error('Could not load hotspots for this country')
+          return response.json() as Promise<Overview>
+        }
+        const overview = await loadOverview()
         if (requestId !== countryRequest.current) return
         setSearchedCountryData(overview)
         const latestHotspotDay = [...overview.series].reverse().find((day) => day.occupied_cells > 0)?.day
         if (latestHotspotDay) setSelectedDay(latestHotspotDay)
+        setCountryLoading(false)
+
+        if (health.firms_configured) {
+          setCountryRefreshing(true)
+          const syncResponse = await fetch('/api/ingest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bbox: bounds, days: 3 }),
+            signal: controller.signal,
+          })
+          if (syncResponse.ok && requestId === countryRequest.current) {
+            const refreshedOverview = await loadOverview()
+            if (requestId !== countryRequest.current) return
+            setSearchedCountryData(refreshedOverview)
+            const refreshedDay = [...refreshedOverview.series].reverse().find((day) => day.occupied_cells > 0)?.day
+            if (refreshedDay) setSelectedDay(refreshedDay)
+          }
+        }
       } catch (cause) {
         if (!controller.signal.aborted && requestId === countryRequest.current) {
           setError((cause as Error).message || 'Could not load country hotspots')
         }
       } finally {
-        if (requestId === countryRequest.current) setCountryLoading(false)
+        if (requestId === countryRequest.current) {
+          setCountryLoading(false)
+          setCountryRefreshing(false)
+        }
       }
     }
     void loadCountry()
@@ -717,8 +735,8 @@ export default function App() {
               {searchedCountryName && (
                 <div className="country-hotspot-status" role="status">
                   {countryLoading
-                    ? `Loading recent hotspots for ${searchedCountryName}…`
-                    : `${points.length.toLocaleString()} hotspot cells shown for ${searchedCountryName} on ${selectedDay} UTC`}
+                    ? `Loading hotspots for ${searchedCountryName}…`
+                    : `${points.length.toLocaleString()} hotspot cells shown for ${searchedCountryName} on ${selectedDay} UTC${countryRefreshing ? ' · refreshing recent data' : ''}`}
                 </div>
               )}
               <div className="layer-row">
