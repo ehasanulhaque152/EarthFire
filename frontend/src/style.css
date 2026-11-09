@@ -1233,9 +1233,9 @@ footer { color: #6e7681; letter-spacing: 0.4px; }
 .calendar-period select option { background: #161b22; }
 
 
-/* Keep the calendar snapshot card from overlapping the following section. */
+/* Keep the calendar card in flow and align the globe panel with its row. */
 .primary-grid {
-  align-items: start;
+  align-items: stretch;
 }
 .side-panel {
   height: auto;
@@ -1300,7 +1300,7 @@ footer { color: #6e7681; letter-spacing: 0.4px; }
 
 /* Interactive playback, saved regions and export controls. */
 .globe-panel { height: auto; min-height: 480px; }
-.globe-wrap { flex: none; height: 340px; }
+.globe-wrap { flex: 1 1 auto; min-height: 340px; height: auto; }
 .globe-tools, .saved-area-tools { display:flex; align-items:center; gap:10px; padding:9px 16px; border-top:1px solid #30363d; color:#8b949e; font-size:10px; }
 .globe-tools button, .saved-area-tools button, .metric-toggle button.export-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; color:#c9d1d9; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:6px 9px; font-size:10px; white-space:nowrap; }
 .globe-tools button:disabled, .saved-area-tools button:disabled { opacity:.65; cursor:default; }
