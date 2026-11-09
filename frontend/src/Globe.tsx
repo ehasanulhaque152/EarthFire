@@ -43,6 +43,35 @@ function ringCenter(ring: number[][]) {
   const lon = xSum / (3 * twiceArea)
   return { lon: ((lon + 540) % 360) - 180, lat: ySum / (3 * twiceArea), area: Math.abs(twiceArea / 2) }
 }
+type CountryFeature = {
+  properties?: { name?: string }
+  geometry: { type: string; coordinates: unknown }
+}
+const countryCollection = feature(
+  world as never,
+  (world as unknown as { objects: { countries: never } }).objects.countries,
+) as unknown as { features: CountryFeature[] }
+export const countryNames = countryCollection.features
+  .map((country) => country.properties?.name)
+  .filter((name): name is string => Boolean(name))
+  .sort((a, b) => a.localeCompare(b))
+export function countryCenter(name: string): [number, number] | null {
+  const country = countryCollection.features.find((item) => item.properties?.name === name)
+  if (!country) return null
+  const geometry = country.geometry
+  const polygons =
+    geometry.type === 'Polygon'
+      ? [geometry.coordinates]
+      : geometry.type === 'MultiPolygon'
+        ? geometry.coordinates
+        : []
+  let anchor: ReturnType<typeof ringCenter> = null
+  for (const polygon of polygons as number[][][][]) {
+    const center = polygon[0] && ringCenter(polygon[0])
+    if (center && (!anchor || center.area > anchor.area)) anchor = center
+  }
+  return anchor ? [anchor.lat, anchor.lon] : null
+}
 
 export default function Globe({
   points,
@@ -56,6 +85,7 @@ export default function Globe({
   onPointSelect: (point: Point) => void
 }) {
   const holder = useRef<HTMLDivElement>(null)
+  const globeRef = useRef<THREE.Group | null>(null)
   const pointsRef = useRef(points)
   const selectedPointRef = useRef(selectedPoint)
   const onPointSelectRef = useRef(onPointSelect)
@@ -65,13 +95,14 @@ export default function Globe({
   useEffect(() => {
     const el = holder.current!
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
+    const camera = new THREE.PerspectiveCamera(37, 1, 0.1, 100)
     camera.position.set(0, 0, 6.5)
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     el.appendChild(renderer.domElement)
     const globe = new THREE.Group()
+    globeRef.current = globe
     scene.add(globe)
     const earthTexture = new THREE.TextureLoader().load('/textures/earth-blue-marble.jpg')
     earthTexture.colorSpace = THREE.SRGBColorSpace
@@ -115,15 +146,6 @@ export default function Globe({
       transparent: true,
       opacity: 0.22,
     })
-    const countries = feature(
-      world as never,
-      (world as unknown as { objects: { countries: never } }).objects.countries,
-    ) as unknown as {
-      features: {
-        properties?: { name?: string }
-        geometry: { type: string; coordinates: unknown }
-      }[]
-    }
     const labelLayer = document.createElement('div')
     labelLayer.style.position = 'absolute'
     labelLayer.style.inset = '0'
@@ -131,7 +153,7 @@ export default function Globe({
     labelLayer.style.pointerEvents = 'none'
     el.appendChild(labelLayer)
     const countryLabels: { element: HTMLSpanElement; point: THREE.Vector3; priority: number; width: number; height: number }[] = []
-    for (const country of countries.features) {
+    for (const country of countryCollection.features) {
       const geometry = country.geometry
       const polygons =
         geometry.type === 'Polygon'
@@ -162,12 +184,12 @@ export default function Globe({
           element.style.position = 'absolute'
           element.style.display = 'block'
           element.style.visibility = 'hidden'
-          element.style.padding = '3px 7px'
+          element.style.padding = '2px 5px'
           element.style.border = '1px solid rgba(152, 205, 219, 0.72)'
           element.style.borderRadius = '5px'
           element.style.background = 'rgba(5, 15, 24, 0.9)'
           element.style.color = '#f3f8fa'
-          element.style.font = '700 11px/1.2 Arial, sans-serif'
+          element.style.font = '700 9px/1.2 Arial, sans-serif'
           element.style.whiteSpace = 'nowrap'
           element.style.textShadow = '0 1px 3px #000'
           element.style.transform = 'translate(-50%, -50%)'
@@ -333,7 +355,7 @@ export default function Globe({
             }
             return inside
           }
-          const country = countries.features.find((item) => {
+          const country = countryCollection.features.find((item) => {
             const geometry = item.geometry
             const polygons =
               geometry.type === 'Polygon'
@@ -414,6 +436,7 @@ export default function Globe({
       disposed = true
       cancelAnimationFrame(raf)
       observer.disconnect()
+      globeRef.current = null
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
@@ -425,6 +448,11 @@ export default function Globe({
       el.removeChild(renderer.domElement)
     }
   }, [])
+  useEffect(() => {
+    if (!globeRef.current) return
+    globeRef.current.rotation.y = -Math.PI / 2 - (focus[1] * Math.PI) / 180
+    globeRef.current.rotation.x = (focus[0] * Math.PI) / 180
+  }, [focus[0], focus[1]])
   useEffect(() => {
     ;(holder.current as HTMLDivElement & { updateMarkers?: () => void })?.updateMarkers?.()
   }, [points, selectedPoint])

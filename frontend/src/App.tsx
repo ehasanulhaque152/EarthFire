@@ -13,11 +13,12 @@ import {
   MapPin,
   Radio,
   RefreshCw,
+  Search,
   Satellite,
   ShieldAlert,
   X,
 } from 'lucide-react'
-import Globe, { type Point } from './Globe'
+import Globe, { countryCenter, countryNames, type Point } from './Globe'
 
 type Cell = {
   day: string
@@ -174,6 +175,8 @@ export default function App() {
   const [selectedDay, setSelectedDay] = useState(today())
   const [data, setData] = useState<Overview | null>(null)
   const [selectedFire, setSelectedFire] = useState<Point | null>(null)
+  const [countryQuery, setCountryQuery] = useState('')
+  const [searchedCountry, setSearchedCountry] = useState<[number, number] | null>(null)
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
@@ -185,6 +188,23 @@ export default function App() {
   const historyRequest = useRef(0)
   const syncInFlight = useRef(false)
   const bbox = regions[region]
+  useEffect(() => {
+    setCountryQuery('')
+    setSearchedCountry(null)
+  }, [region])
+  function focusCountry(query: string) {
+    const normalized = query.trim().toLocaleLowerCase()
+    if (!normalized) return
+    const country =
+      countryNames.find((name) => name.toLocaleLowerCase() === normalized) ||
+      countryNames.find((name) => name.toLocaleLowerCase().startsWith(normalized))
+    if (!country) return
+    const center = countryCenter(country)
+    if (center) {
+      setCountryQuery(country)
+      setSearchedCountry(center)
+    }
+  }
   async function load() {
     setLoading(true)
     try {
@@ -572,7 +592,7 @@ export default function App() {
                 <Globe
                   key={region}
                   points={points}
-                  focus={[(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]}
+                  focus={searchedCountry || [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]}
                   selectedPoint={selectedFire}
                   onPointSelect={setSelectedFire}
                 />
@@ -605,6 +625,34 @@ export default function App() {
                     <p>Grid-cell center from satellite detections; not a fire perimeter.</p>
                   </section>
                 )}
+              </div>
+              <div className="globe-search-row">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  type="search"
+                  list="earthfire-country-options"
+                  value={countryQuery}
+                  aria-label="Search for a country on the globe"
+                  placeholder="Search for a country"
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setCountryQuery(value)
+                    const match = countryNames.find(
+                      (name) => name.toLocaleLowerCase() === value.trim().toLocaleLowerCase(),
+                    )
+                    if (match) setSearchedCountry(countryCenter(match))
+                    else if (!value.trim()) setSearchedCountry(null)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      focusCountry(countryQuery)
+                    }
+                  }}
+                />
+                <datalist id="earthfire-country-options">
+                  {countryNames.map((name) => <option key={name} value={name} />)}
+                </datalist>
               </div>
               <div className="layer-row">
                 <div className="layer-switch">
