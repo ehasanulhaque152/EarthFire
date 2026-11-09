@@ -1,6 +1,6 @@
 # EarthFire
 
-EarthFire is a public NASA FIRMS explorer for comparing MODIS and VIIRS active-fire detections. [Open the live dashboard](https://earthfire.onrender.com/). Read the [detailed project and deployment guide](docs/PROJECT_DOCUMENTATION.md). It has a FastAPI/SQLite ingestion and analysis service, a React/Three.js dashboard, daily 0.5° spatial grid, statistical activity signal, and an optional LSTM next-day occupied-cell forecast.
+EarthFire is a public NASA FIRMS explorer for comparing MODIS and VIIRS active-fire detections. [Open the live dashboard](https://earthfire.onrender.com/). New here? Start with the [visitor user guide](docs/USER_GUIDE.md). Read the [detailed project and deployment guide](docs/PROJECT_DOCUMENTATION.md). It has a FastAPI/SQLite ingestion and analysis service, a React/Three.js dashboard, daily 0.5° spatial grid, statistical activity signal, and an optional LSTM next-day occupied-cell forecast.
 
 The linked 2026 Space Apps challenge statement was unavailable when this project was created, so the implementation follows the architecture supplied in the request. Check the official challenge statement and participation rules before using this as a hackathon submission.
 
