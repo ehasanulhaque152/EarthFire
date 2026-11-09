@@ -11,7 +11,7 @@ backend/app/core.py     FIRMS ingestion, SQLite storage, daily grid and statisti
 backend/app/main.py     FastAPI endpoints
 backend/backfill.py     Historical FIRMS importer
 backend/train_lstm.py  Optional TensorFlow/Keras forecast training
-frontend/src/App.tsx    Dashboard controls, metrics, calendar and charts
+frontend/src/App.tsx    Dashboard controls, metrics, timeline, alerts and exports
 frontend/src/Globe.tsx  Interactive 3D globe
 frontend/src/style.css  Responsive dashboard styles
 docs/earthfire-user-guide-60s.mp4  Silent, captioned one-minute user guide
@@ -30,6 +30,13 @@ Click the preview image to open the silent video, then open the [full one-minute
 For the local experience, run the API and dashboard as described below, then open [the local preview](http://127.0.0.1:5173/).
 
 To regenerate the videos, install Pillow and `imageio-ffmpeg`, then run `python tools/create_user_guide_video.py` from the repository root.
+
+## Dashboard features
+
+- **Play the fire timeline:** use the play button or slider under the globe to move through the UTC days currently loaded for the selected region or calendar month. Each step updates the selected day and its hotspot markers.
+- **Inspect a hotspot:** select a globe marker to see its country, date, grid-cell coordinates, separate MODIS and VIIRS detection counts and FRP, plus occupied cell area and density. These are cell-level observations, not a confirmed fire perimeter or a confidence estimate.
+- **Follow a region and receive alerts:** save one of the dashboard's named regions in this browser, then enable browser notifications. When the active region's FIRMS sync increases the current 30-day detection total, EarthFire sends at most one notification per region per day. The region list and notification permission are browser-local; alerts require the dashboard to be open for its sync to run.
+- **Export data and charts:** download the loaded cell observations as CSV or save the current activity chart as SVG. The CSV contains aggregated grid-cell/day values, not raw NASA detection records.
 
 ## Public demo deployment
 
