@@ -130,7 +130,7 @@ export default function Globe({
     labelLayer.style.zIndex = '3'
     labelLayer.style.pointerEvents = 'none'
     el.appendChild(labelLayer)
-    const countryLabels: { element: HTMLSpanElement; point: THREE.Vector3; priority: number }[] = []
+    const countryLabels: { element: HTMLSpanElement; point: THREE.Vector3; priority: number; width: number; height: number }[] = []
     for (const country of countries.features) {
       const geometry = country.geometry
       const polygons =
@@ -160,7 +160,8 @@ export default function Globe({
           element.className = 'country-name-label'
           element.textContent = name
           element.style.position = 'absolute'
-          element.style.display = 'none'
+          element.style.display = 'block'
+          element.style.visibility = 'hidden'
           element.style.padding = '3px 7px'
           element.style.border = '1px solid rgba(152, 205, 219, 0.72)'
           element.style.borderRadius = '5px'
@@ -171,7 +172,10 @@ export default function Globe({
           element.style.textShadow = '0 1px 3px #000'
           element.style.transform = 'translate(-50%, -50%)'
           labelLayer.appendChild(element)
-          countryLabels.push({ element, point: xyz(anchor.lat, anchor.lon, 2.035), priority: anchor.area })
+          const size = element.getBoundingClientRect()
+          element.style.display = 'none'
+          element.style.visibility = ''
+          countryLabels.push({ element, point: xyz(anchor.lat, anchor.lon, 2.035), priority: anchor.area, width: size.width, height: size.height })
         }
       }
     }
@@ -367,19 +371,36 @@ export default function Globe({
         if (facing > 0.12) visibleLabels.push({ ...label, facing })
       }
       visibleLabels.sort((a, b) => b.facing - a.facing || b.priority - a.priority)
-      const labelLimit = camera.position.z < 4.2 ? 26 : camera.position.z < 5.4 ? 18 : 12
-      const shown = new Set(visibleLabels.slice(0, labelLimit).map((label) => label.element))
+      const labelLimit = camera.position.z < 4.2 ? 28 : camera.position.z < 5.4 ? 20 : 12
       const width = el.clientWidth
       const height = el.clientHeight
       for (const label of countryLabels) {
-        if (!shown.has(label.element)) {
-          label.element.style.display = 'none'
-          continue
-        }
+        label.element.style.display = 'none'
+      }
+      const occupied: { left: number; right: number; top: number; bottom: number }[] = []
+      let shownCount = 0
+      for (const label of visibleLabels) {
+        if (shownCount >= labelLimit) break
         const position = label.point.clone().applyMatrix4(globe.matrixWorld).project(camera)
+        if (position.z < -1 || Math.abs(position.x) > 1 || Math.abs(position.y) > 1) continue
+        const x = ((position.x + 1) / 2) * width
+        const y = ((1 - position.y) / 2) * height
+        const box = {
+          left: x - label.width / 2,
+          right: x + label.width / 2,
+          top: y - label.height / 2,
+          bottom: y + label.height / 2,
+        }
+        const overlaps = occupied.some((other) =>
+          box.left < other.right + 5 && box.right > other.left - 5 &&
+          box.top < other.bottom + 4 && box.bottom > other.top - 4,
+        )
+        if (overlaps) continue
+        occupied.push(box)
+        shownCount += 1
         label.element.style.display = 'block'
-        label.element.style.left = `${((position.x + 1) / 2) * width}px`
-        label.element.style.top = `${((1 - position.y) / 2) * height}px`
+        label.element.style.left = `${x}px`
+        label.element.style.top = `${y}px`
       }
       renderer.render(scene, camera)
       raf = requestAnimationFrame(animate)
