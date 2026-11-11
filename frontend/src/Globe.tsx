@@ -100,12 +100,14 @@ export default function Globe({
   zoom,
   selectedPoint,
   onPointSelect,
+  onCountrySelect,
 }: {
   points: Point[]
   focus: [number, number]
   zoom: number
   selectedPoint: Point | null
   onPointSelect: (point: Point) => void
+  onCountrySelect: (country: string) => void
 }) {
   const holder = useRef<HTMLDivElement>(null)
   const globeRef = useRef<THREE.Group | null>(null)
@@ -113,9 +115,11 @@ export default function Globe({
   const pointsRef = useRef(points)
   const selectedPointRef = useRef(selectedPoint)
   const onPointSelectRef = useRef(onPointSelect)
+  const onCountrySelectRef = useRef(onCountrySelect)
   pointsRef.current = points
   selectedPointRef.current = selectedPoint
   onPointSelectRef.current = onPointSelect
+  onCountrySelectRef.current = onCountrySelect
   useEffect(() => {
     const el = holder.current!
     const scene = new THREE.Scene()
@@ -205,6 +209,21 @@ export default function Globe({
           const element = document.createElement('span')
           element.className = 'country-name-label'
           element.textContent = name
+          element.setAttribute('role', 'button')
+          element.tabIndex = 0
+          element.setAttribute('aria-label', `Search ${name} on the globe`)
+          element.addEventListener('pointerdown', (event) => event.stopPropagation())
+          element.addEventListener('pointerup', (event) => event.stopPropagation())
+          element.addEventListener('click', (event) => {
+            event.stopPropagation()
+            onCountrySelectRef.current(name)
+          })
+          element.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onCountrySelectRef.current(name)
+            }
+          })
           element.style.position = 'absolute'
           element.style.display = 'block'
           element.style.visibility = 'hidden'
@@ -217,6 +236,8 @@ export default function Globe({
           element.style.whiteSpace = 'nowrap'
           element.style.textShadow = '0 1px 3px #000'
           element.style.transform = 'translate(-50%, -50%)'
+          element.style.pointerEvents = 'auto'
+          element.style.cursor = 'pointer'
           labelLayer.appendChild(element)
           const size = element.getBoundingClientRect()
           element.style.display = 'none'
