@@ -79,6 +79,22 @@ const nf = new Intl.NumberFormat('en-US')
 const dayString = (d: Date) => d.toISOString().slice(0, 10)
 const today = () => dayString(new Date())
 
+function continentForCountry(name: string) {
+  const center = countryCenter(name)
+  if (!center) return null
+  const [lat, lon] = center
+  if (lat < -60) return 'Antarctica'
+  // Use the country's largest land polygon center for a practical continent label.
+  if (lon >= -20 && lon <= 55 && lat >= -35 && lat <= 38) return 'Africa'
+  if (lon >= -85 && lon <= -30 && lat >= -60 && lat < 15) return 'South America'
+  if (lon < -30 && lat >= 7) return 'North America'
+  if (lon >= 130 && lon <= 180 && lat < 0) return 'Oceania'
+  if (lon >= -25 && lon < 60 && lat >= 35 && lat <= 75) return 'Europe'
+  if (lon >= 25 && lon <= 180 && lat >= -10 && lat <= 80) return 'Asia'
+  if (lon >= 110 && lon <= 180 && lat < 0) return 'Oceania'
+  return null
+}
+
 function Sparkline({ values, color = '#ff7859' }: { values: number[]; color?: string }) {
   const max = Math.max(1, ...values),
     min = Math.min(0, ...values),
@@ -747,7 +763,7 @@ export default function App() {
                         <X size={15} />
                       </button>
                     </div>
-                    <div className="fire-detail-row"><span>Region</span><strong>{region}</strong></div>
+                    <div className="fire-detail-row"><span>Region</span><strong>{searchedCountryName ? (continentForCountry(searchedCountryName) || region) : region}</strong></div>
                     {selectedFire.country && (
                       <div className="fire-detail-row"><span>Country</span><strong>{selectedFire.country}</strong></div>
                     )}
