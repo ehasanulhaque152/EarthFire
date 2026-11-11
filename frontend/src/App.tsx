@@ -744,6 +744,7 @@ export default function App() {
                   zoom={searchedCountry ? 5.1 : 6.5}
                   selectedPoint={selectedFire}
                   onPointSelect={setSelectedFire}
+                  onCountrySelect={focusCountry}
                 />
                 <div className="globe-top-label">
                   SATELLITE OBSERVATIONS <span>•</span> {region.toUpperCase()}
