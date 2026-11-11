@@ -20,7 +20,9 @@ Dates are shown in **UTC**. Coverage depends on the data available for the selec
 - Drag the globe to rotate it.
 - Scroll over the globe to zoom on a computer. On a phone or tablet, pinch to zoom and drag to rotate.
 - Use **Search for a country** below the globe to focus the view on a country and show hotspot cells for it.
-- Country search and the region menu serve different purposes: the region menu selects a dashboard region, while country search focuses the globe on a country.
+- You can also click a visible country name on the globe. EarthFire fills the country search, zooms to that country, and loads its hotspot cells using the same flow as typed search.
+- Country names are only shown on the visible side of the globe, with some labels hidden to prevent crowding. If you do not see the name, rotate or zoom the globe, or use the search field below it.
+- Country search and the region menu serve different purposes: the region menu selects a dashboard region, while country search focuses the globe on a country and loads its hotspot data.
 
 ### Read and select hotspots
 
