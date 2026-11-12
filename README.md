@@ -87,7 +87,7 @@ This script calls the FIRMS area API in 5-day chunks. Larger regions and longer 
 .\.venv\Scripts\python -m backend.train_lstm --bbox 88 20 93 27
 ```
 
-The API and dashboard show the saved forecast when it was trained through the latest covered day and that day is recent. The activity level remains a separate statistical comparison; the LSTM predicts next-day occupied cells and reports holdout error.
+The API and dashboard show the saved forecast when it was trained through the latest covered day and that day is recent. The dashboard's next-day outlook uses a 7-day rolling baseline after at least 14 consecutive recent days with both MODIS and VIIRS coverage. It reports a historical one-step MAE. It estimates occupied 0.5° grid cells, not individual fires, ignition locations, or fire probability. The optional LSTM forecast remains separate and is shown only when a recent trained artifact is available.
 
 ## Harmonization and limits
 
