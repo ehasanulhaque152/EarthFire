@@ -1325,3 +1325,7 @@ footer { color: #6e7681; letter-spacing: 0.4px; }
   font-size: 9px;
   line-height: 1.35;
 }
+.metric-card.prediction-card {
+  height: auto;
+  min-height: 150px;
+}
