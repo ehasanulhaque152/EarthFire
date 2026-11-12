@@ -1172,7 +1172,7 @@ h1 em { color: #58a6ff; }
 .region-select option { background: #161b22; }
 .freshness, .metric-heading, .metric-foot { color: #8b949e; }
 .freshness svg { color: #58a6ff; }
-.metric-card { height: 132px; padding: 17px; }
+.metric-card { height: 150px; padding: 17px; }
 .metric-number { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 .metric-number small { color: #8b949e; }
 .risk-value { color: #d29922; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
@@ -1326,6 +1326,6 @@ footer { color: #6e7681; letter-spacing: 0.4px; }
   line-height: 1.35;
 }
 .metric-card.prediction-card {
-  height: auto;
+  height: 150px;
   min-height: 150px;
 }
