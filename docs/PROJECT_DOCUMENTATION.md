@@ -147,12 +147,18 @@ The daily series contains separate sensor totals, number of occupied cells and `
 
 `GET /api/overview` excludes the current UTC day from the signal because that day may be incomplete. It takes the contiguous suffix of days with at least two fetched sources. `statistical_risk()` compares its latest occupied-cell count with up to 14 prior counts. It needs at least seven baseline days; otherwise it reports `insufficient history`. Its score is a clipped transformation of a z-like deviation and its labels are `normal`, `elevated`, or `high`. The label is **relative activity**, not wildfire probability or emergency risk.
 
+### Experimental next-day outlook
+
+The overview API calculates an experimental rolling-baseline estimate when the selected region has at least 14 consecutive days of complete MODIS and VIIRS coverage through yesterday (UTC). It blends the previous 7-day mean occupied-cell count (75%) with the preceding 7-day mean (25%). The response includes the target date, last observation date, number of covered training days, and a historical one-step mean absolute error (MAE).
+
+The estimate is a count of occupied 0.5° grid cells. It is not a count of individual fires, a forecast of ignition locations, a fire probability, or an emergency warning. If the recent coverage streak is incomplete or too short, the API returns `prediction: null` and the dashboard explains that more complete history is needed. The optional trained LSTM is a separate forecast.
+
 ### HTTP endpoints
 
 | Endpoint | Input | Output |
 | --- | --- | --- |
 | `GET /api/health` | none | API status, stored detection count, boolean key status. |
-| `GET /api/overview` | `west`, `south`, `east`, `north`, optional `start`, `end` | Daily cells, series, source coverage, method metadata, activity signal, optional saved forecast. Range is capped at 366 days. |
+| `GET /api/overview` | `west`, `south`, `east`, `north`, optional `start`, `end` | Daily cells, series, source coverage, method metadata, activity signal, rolling-baseline prediction when coverage permits, and optional saved LSTM forecast. Range is capped at 366 days. |
 | `POST /api/ingest/recent` | JSON `bbox` | Fills missing recent coverage for 14 prior days, then refreshes the latest 3 days. Cached days are skipped. |
 | `POST /api/history/month` | JSON `bbox`, `year`, `month` | Loads a calendar month from NRT products for dates within the last 60 days and SP archive products for older dates, then returns cells and daily counts. |
 | `POST /api/ingest` | JSON `bbox`, `days` (1–5), optional `sources`, `start_date` | Per-source received row counts and total. Calls NASA FIRMS. |
@@ -167,7 +173,7 @@ Bounding boxes are `[west, south, east, north]` and validated against world coor
 
 `frontend/src/App.tsx` contains the page and typed `Cell`, `Day`, and `Overview` response structures. It stores region, selected UTC day, map layer, chart metric, timeline playback, followed regions, notification permission and connection/loading/error states with React hooks. A region change triggers `load()`, which requests a 30-day overview and `/api/health`. Sync calls `/api/ingest/recent`, which fills gaps for the preceding 14 days and refreshes the latest three days. The calendar's month/year selectors call `/api/history/month`; results update the calendar, selected-day snapshot and globe points. Older data uses available SP archive products, while the recent window uses NRT products. The frontend does not embed the FIRMS key.
 
-The metric cards show totals for the loaded 30-day window, while the calendar and globe show the selected day. The layer buttons filter that day's cells to MODIS, VIIRS, or all occupied cells. The trends chart uses SVG polylines for sensor counts or FRP. Its displayed “harmonized FRP proxy” uses the larger **daily** sensor FRP total, whereas `core.py` returns the larger sensor sum **per cell** in each cell record. Both are exploratory display proxies and should not be treated as calibrated energy totals. `frontend/src/style.css` defines layout, responsive rules, colors and control states.
+The metric cards show totals for the loaded 30-day window, the experimental next-day outlook when sufficient complete coverage exists, and the activity signal. The calendar and globe show the selected day. The layer buttons filter that day's cells to MODIS, VIIRS, or all occupied cells. The trends chart uses SVG polylines for sensor counts or FRP. Its displayed “harmonized FRP proxy” uses the larger **daily** sensor FRP total, whereas `core.py` returns the larger sensor sum **per cell** in each cell record. Both are exploratory display proxies and should not be treated as calibrated energy totals. `frontend/src/style.css` defines layout, responsive rules, colors and control states.
 
 ### Interactive dashboard features
 
@@ -226,7 +232,7 @@ For a more defensible future model, compare against a persistence or seasonal ba
 | `backend/__init__.py`, `backend/app/__init__.py` | Mark Python packages for `python -m backend...` imports. |
 | `backend/requirements.txt` | Core API/runtime Python packages. |
 | `backend/requirements-ml.txt` | Optional TensorFlow dependency for training. |
-| `backend/app/core.py` | `.env` loading, NASA CSV retrieval/parsing, SQLite schema, daily grid, density, FRP proxy and statistical activity calculation. |
+| `backend/app/core.py` | `.env` loading, NASA CSV retrieval/parsing, SQLite schema, daily grid, density, FRP proxy, statistical activity calculation and rolling-baseline next-day outlook. |
 | `backend/app/main.py` | FastAPI routes, input validation, error responses, CORS, recent-history backfill, calendar month history and saved-forecast freshness check. |
 | `backend/backfill.py` | CLI importer that calls the FIRMS API in five-day chunks. |
 | `backend/train_lstm.py` | Optional TensorFlow/Keras training, chronological holdout, next-day prediction and JSON artifact. |
