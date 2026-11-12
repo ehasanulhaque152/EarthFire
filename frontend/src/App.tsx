@@ -54,6 +54,14 @@ type Overview = {
   total_detections: number
   updated_at: string | null
   risk: { level: string; score: number; trend: string; model: string; message: string }
+  prediction?: {
+    forecast_for: string
+    forecast_through: string
+    forecast_next_day_cells: number
+    backtest_mae_cells: number
+    training_days: number
+    model: string
+  } | null
   forecast?: {
     forecast_next_day_cells: number
     holdout_mae_cells: number
@@ -721,6 +729,25 @@ export default function App() {
               </div>
               <div className="risk-meter">
                 <span style={{ width: `${data?.risk.score || 0}%` }} />
+              </div>
+            </div>
+            <div className="metric-card prediction-card" aria-label="Experimental next-day fire activity forecast">
+              <div className="metric-heading">
+                Next-day outlook <Satellite size={17} />
+              </div>
+              <div className="metric-number">
+                {data?.prediction ? nf.format(Math.round(data.prediction.forecast_next_day_cells)) : '—'}{' '}
+                <small>cells</small>
+              </div>
+              <div className="metric-foot">
+                {data?.prediction
+                  ? `For ${data.prediction.forecast_for} UTC · MAE ±${data.prediction.backtest_mae_cells} cells`
+                  : 'Needs 14 consecutive current days'}
+              </div>
+              <div className="prediction-note">
+                {data?.prediction
+                  ? '7-day MODIS + VIIRS grid estimate · not a fire count or probability'
+                  : 'Uses complete MODIS + VIIRS coverage'}
               </div>
             </div>
           </section>
