@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
-from .core import SOURCES, connect, ingest, statistical_risk, summarize
+from .core import SOURCES, connect, ingest, next_day_forecast, statistical_risk, summarize
 from backend.train_lstm import artifact_path
 import json
 
@@ -70,7 +70,8 @@ def overview(
     complete_series = data["series"][:-1] if end == date.today() else data["series"]
     last_gap = max((i for i, row in enumerate(complete_series) if row["covered_sources"] < 2), default=-1)
     risk_series = complete_series[last_gap+1:]
-    data.update({"bbox": bbox, "start": start, "end": end, "risk": statistical_risk(risk_series)})
+    data.update({"bbox": bbox, "start": start, "end": end, "risk": statistical_risk(risk_series),
+        "prediction": next_day_forecast(data["series"])})
     artifact = artifact_path(bbox)
     if artifact.exists():
         forecast = json.loads(artifact.read_text(encoding="utf-8"))

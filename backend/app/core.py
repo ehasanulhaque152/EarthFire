@@ -173,3 +173,41 @@ def statistical_risk(series: list[dict]):
     level = "high" if z >= 1.5 else "elevated" if z >= .5 else "normal"
     return {"level": level, "score": score, "trend": "rising" if recent > mean * 1.1 else "falling" if recent < mean * .9 else "steady",
       "model": "statistics", "message": f"Latest {recent} occupied cells; prior mean {mean:.1f}"}
+
+def next_day_forecast(series: list[dict], today_utc: date | None = None):
+    """Estimate next-day occupied 0.5° cells from fresh, complete sensor coverage.
+
+    This transparent rolling baseline is not an exact fire-location, fire-count,
+    fire-probability, or emergency-risk forecast. It requires 14 consecutive
+    days with both MODIS and VIIRS coverage.
+    """
+    today_utc = today_utc or datetime.now(timezone.utc).date()
+    streak = []
+    expected_day = today_utc - timedelta(days=1)
+    for row in reversed(series):
+        observed_day = date.fromisoformat(row["day"])
+        if observed_day >= today_utc:
+            continue
+        if observed_day != expected_day or row.get("covered_sources", 0) < 2:
+            break
+        streak.append(float(row["occupied_cells"]))
+        expected_day -= timedelta(days=1)
+    values = list(reversed(streak))
+    if len(values) < 14:
+        return None
+    errors = [
+        abs(sum(values[index - 7:index]) / 7 - values[index])
+        for index in range(7, len(values))
+    ]
+    recent_mean = sum(values[-7:]) / 7
+    previous_mean = sum(values[-14:-7]) / 7
+    estimate = max(0.0, 0.75 * recent_mean + 0.25 * previous_mean)
+    through_day = today_utc - timedelta(days=1)
+    return {
+        "forecast_for": today_utc.isoformat(),
+        "forecast_through": through_day.isoformat(),
+        "forecast_next_day_cells": round(estimate, 1),
+        "backtest_mae_cells": round(sum(errors) / len(errors), 1),
+        "training_days": len(values),
+        "model": "7-day rolling baseline",
+    }
