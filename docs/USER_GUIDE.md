@@ -13,6 +13,14 @@ EarthFire is an interactive explorer for NASA FIRMS active-fire observations fro
 
 Dates are shown in **UTC**. Coverage depends on the data available for the selected region and period; a date with no detections is different from a date that has not been loaded.
 
+## Summary cards and next-day outlook
+
+The five summary cards show total MODIS and VIIRS detections, occupied 0.5° grid cells, sensor fire-radiative power (FRP), the relative activity signal, and the experimental next-day outlook. They use the same height so the dashboard stays aligned; the uniform sizing changes the layout only, not the data.
+
+The outlook estimates the next day's number of occupied grid cells. It appears when EarthFire has at least 14 consecutive days of complete MODIS and VIIRS coverage through yesterday (UTC). The card gives the target date and a historical mean absolute error (MAE) to show typical past forecast error. If coverage is incomplete or too short, the card explains that more history is needed.
+
+This is an experimental rolling-baseline estimate, not a count of individual fires, a probability, an ignition-location prediction, or an emergency warning. It blends the previous 7-day mean occupied-cell count (75%) with the preceding 7-day mean (25%).
+
 ## Explore the globe
 
 ### Rotate, zoom and search
